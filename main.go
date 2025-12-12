@@ -1,13 +1,67 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
+
+	"github.com/dfedoryshchev/warpmap/internal/metrics"
 )
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
+	fmt.Fprintln(os.Stderr, "commands: hotspots <dir>")
+}
+
+var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
+
+func sourceFiles(dir string) []string {
+	var out []string
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", ".git", "dist", "build":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if sourceExt[filepath.Ext(p)] {
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out
+}
+
+func hotspotsCmd(args []string) int {
+	fset := flag.NewFlagSet("hotspots", flag.ExitOnError)
+	top := fset.Int("n", 15, "how many to show")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap hotspots <dir>")
+		return 2
+	}
+	files := sourceFiles(dir)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	ranked := metrics.Hotspots(dir, files, churn)
+	limit := *top
+	if limit > len(ranked) {
+		limit = len(ranked)
+	}
+	for _, h := range ranked[:limit] {
+		fmt.Printf("%.3f  churn=%-3d cx=%-4d %s\n", h.Score, h.Churn, h.Complexity, h.File)
+	}
+	return 0
 }
 
 func main() {
@@ -17,8 +71,7 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "hotspots":
-		fmt.Fprintln(os.Stderr, "hotspots: not implemented yet")
-		os.Exit(1)
+		os.Exit(hotspotsCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
