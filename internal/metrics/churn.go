@@ -3,12 +3,22 @@ package metrics
 import (
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
 // Churn counts how many commits touched each file within the window, keyed
 // repo-relative exactly as git reports the path.
 type Churn map[string]int
+
+// git --numstat prints a rename as "path/{old => new}/file" or "{old => new}".
+// pull out the new path so the change counts against the file that exists now.
+var renameRe = regexp.MustCompile("\\{[^}]* => ([^}]*)\\}")
+
+func normalizeRename(p string) string {
+	p = renameRe.ReplaceAllString(p, "$1")
+	return strings.ReplaceAll(p, "//", "/")
+}
 
 // GitChurn walks the last windowMonths of history and counts changes per file.
 func GitChurn(repoDir string, windowMonths int) (Churn, error) {
@@ -23,7 +33,7 @@ func GitChurn(repoDir string, windowMonths int) (Churn, error) {
 		if len(parts) != 3 {
 			continue
 		}
-		churn[parts[2]]++
+		churn[normalizeRename(parts[2])]++
 	}
 	return churn, nil
 }
