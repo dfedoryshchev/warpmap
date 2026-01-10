@@ -40,16 +40,43 @@ func extractImports(path string) []string {
 	return specs
 }
 
+var resolveExts = []string{".ts", ".tsx", ".js", ".jsx"}
+var indexNames = []string{"index.ts", "index.tsx", "index.js", "index.jsx"}
+
 // resolve a relative specifier to a file on disk. bare/external specifiers return "".
 func resolve(fromFile, spec string) string {
 	if !strings.HasPrefix(spec, ".") {
 		return ""
 	}
 	base := filepath.Join(filepath.Dir(fromFile), spec)
-	if _, err := os.Stat(base + ".ts"); err == nil {
-		return base + ".ts"
+	// the spec may already carry an extension
+	if hasSourceExt(base) {
+		if _, err := os.Stat(base); err == nil {
+			return base
+		}
+	}
+	for _, ext := range resolveExts {
+		if _, err := os.Stat(base + ext); err == nil {
+			return base + ext
+		}
+	}
+	for _, idx := range indexNames {
+		cand := filepath.Join(base, idx)
+		if _, err := os.Stat(cand); err == nil {
+			return cand
+		}
 	}
 	return ""
+}
+
+func hasSourceExt(p string) bool {
+	ext := filepath.Ext(p)
+	for _, e := range resolveExts {
+		if ext == e {
+			return true
+		}
+	}
+	return false
 }
 
 // Build resolves intra-project imports into a dependency graph.
