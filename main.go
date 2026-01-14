@@ -1,19 +1,21 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 )
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands: hotspots <dir>")
+	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir>")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
@@ -64,6 +66,26 @@ func hotspotsCmd(args []string) int {
 	return 0
 }
 
+func analyzeCmd(args []string) int {
+	fset := flag.NewFlagSet("analyze", flag.ExitOnError)
+	asJSON := fset.Bool("json", false, "print the full graph as json")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap analyze <dir>")
+		return 2
+	}
+	g := graph.Build(sourceFiles(dir))
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(g)
+		return 0
+	}
+	fmt.Printf("%d files, %d import edges\n", len(g.Files), len(g.Edges))
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -72,6 +94,8 @@ func main() {
 	switch os.Args[1] {
 	case "hotspots":
 		os.Exit(hotspotsCmd(os.Args[2:]))
+	case "analyze":
+		os.Exit(analyzeCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
