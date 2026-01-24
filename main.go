@@ -10,12 +10,13 @@ import (
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
+	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir>")
+	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir> | trace <dir> <file>")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
@@ -86,6 +87,25 @@ func analyzeCmd(args []string) int {
 	return 0
 }
 
+func traceCmd(args []string) int {
+	fset := flag.NewFlagSet("trace", flag.ExitOnError)
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	file := fset.Arg(1)
+	if dir == "" || file == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap trace <dir> <file>")
+		return 2
+	}
+	target := filepath.Join(dir, file)
+	g := graph.Build(sourceFiles(dir))
+	affected := trace.BlastRadius(g, target)
+	fmt.Printf("%d files depend on %s\n", len(affected), file)
+	for _, f := range affected {
+		fmt.Printf("  %s\n", f)
+	}
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -96,6 +116,8 @@ func main() {
 		os.Exit(hotspotsCmd(os.Args[2:]))
 	case "analyze":
 		os.Exit(analyzeCmd(os.Args[2:]))
+	case "trace":
+		os.Exit(traceCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
