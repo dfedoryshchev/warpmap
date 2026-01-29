@@ -14,12 +14,15 @@ type Hotspot struct {
 
 // Hotspots ranks files by normalized churn x complexity: the files that change
 // often AND are hard to change. files are absolute paths; churn is keyed
-// repo-relative, so each is relativized before the lookup.
+// repo-relative with forward slashes (as git reports), so each is relativized and
+// slash-normalized before the lookup - on Windows filepath.Rel yields backslashes,
+// which never matched git's keys and silently zeroed every churn count.
 func Hotspots(repoDir string, files []string, churn Churn) []Hotspot {
 	rows := make([]Hotspot, 0, len(files))
 	maxChurn, maxCx := 1, 1
 	for _, f := range files {
 		rel, _ := filepath.Rel(repoDir, f)
+		rel = filepath.ToSlash(rel)
 		c := churn[rel]
 		cx, _ := FileComplexity(f)
 		if c > maxChurn {
