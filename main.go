@@ -89,6 +89,7 @@ func analyzeCmd(args []string) int {
 
 func traceCmd(args []string) int {
 	fset := flag.NewFlagSet("trace", flag.ExitOnError)
+	depth := fset.Int("depth", 0, "limit how many import hops to walk (0 = all)")
 	fset.Parse(args)
 	dir := fset.Arg(0)
 	file := fset.Arg(1)
@@ -98,7 +99,7 @@ func traceCmd(args []string) int {
 	}
 	target := filepath.Join(dir, file)
 	g := graph.Build(sourceFiles(dir))
-	affected := trace.BlastRadius(g, target)
+	affected := trace.BlastRadius(g, target, *depth)
 	fmt.Printf("%d files depend on %s\n", len(affected), file)
 	for _, f := range affected {
 		fmt.Printf("  %s\n", f)
