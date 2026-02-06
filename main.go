@@ -16,7 +16,7 @@ import (
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir> | trace <dir> <file>")
+	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir> | trace <dir> <file> | dead <dir>")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
@@ -107,6 +107,22 @@ func traceCmd(args []string) int {
 	return 0
 }
 
+func deadCmd(args []string) int {
+	fset := flag.NewFlagSet("dead", flag.ExitOnError)
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap dead <dir>")
+		return 2
+	}
+	orphans := graph.Orphans(graph.Build(sourceFiles(dir)))
+	fmt.Printf("%d files nothing imports (candidate dead code):\n", len(orphans))
+	for _, f := range orphans {
+		fmt.Printf("  %s\n", f)
+	}
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -119,6 +135,8 @@ func main() {
 		os.Exit(analyzeCmd(os.Args[2:]))
 	case "trace":
 		os.Exit(traceCmd(os.Args[2:]))
+	case "dead":
+		os.Exit(deadCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
