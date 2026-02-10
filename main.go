@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
@@ -16,7 +17,7 @@ import (
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands: hotspots <dir> | analyze <dir> | trace <dir> <file> | dead <dir>")
+	fmt.Fprintln(os.Stderr, "commands: hotspots | analyze | trace | dead | cycles  (all take <dir>)")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
@@ -123,6 +124,22 @@ func deadCmd(args []string) int {
 	return 0
 }
 
+func cyclesCmd(args []string) int {
+	fset := flag.NewFlagSet("cycles", flag.ExitOnError)
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap cycles <dir>")
+		return 2
+	}
+	cycles := graph.Cycles(graph.Build(sourceFiles(dir)))
+	fmt.Printf("%d import cycles:\n", len(cycles))
+	for _, c := range cycles {
+		fmt.Printf("  %s\n", strings.Join(c, " -> "))
+	}
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -137,6 +154,8 @@ func main() {
 		os.Exit(traceCmd(os.Args[2:]))
 	case "dead":
 		os.Exit(deadCmd(os.Args[2:]))
+	case "cycles":
+		os.Exit(cyclesCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)

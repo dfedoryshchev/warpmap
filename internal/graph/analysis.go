@@ -37,3 +37,48 @@ func isEntryPoint(f string) bool {
 	}
 	return false
 }
+
+// Cycles returns import cycles in the graph, each as the files on the cycle.
+// circular imports are a real maintenance smell: neither file can be understood or
+// changed without the other.
+func Cycles(g Graph) [][]string {
+	adj := map[string][]string{}
+	for _, e := range g.Edges {
+		adj[e.From] = append(adj[e.From], e.To)
+	}
+	const (
+		unvisited = 0
+		onStack   = 1
+		done      = 2
+	)
+	state := map[string]int{}
+	var stack []string
+	var cycles [][]string
+	var dfs func(node string)
+	dfs = func(node string) {
+		state[node] = onStack
+		stack = append(stack, node)
+		for _, next := range adj[node] {
+			switch state[next] {
+			case unvisited:
+				dfs(next)
+			case onStack:
+				for i := len(stack) - 1; i >= 0; i-- {
+					if stack[i] == next {
+						cycle := append([]string{}, stack[i:]...)
+						cycles = append(cycles, cycle)
+						break
+					}
+				}
+			}
+		}
+		stack = stack[:len(stack)-1]
+		state[node] = done
+	}
+	for _, f := range g.Files {
+		if state[f] == unvisited {
+			dfs(f)
+		}
+	}
+	return cycles
+}
