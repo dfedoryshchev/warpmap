@@ -140,6 +140,27 @@ func cyclesCmd(args []string) int {
 	return 0
 }
 
+func godCmd(args []string) int {
+	fset := flag.NewFlagSet("god", flag.ExitOnError)
+	top := fset.Int("n", 15, "how many to show")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap god <dir>")
+		return 2
+	}
+	mods := graph.GodModules(graph.Build(sourceFiles(dir)))
+	limit := *top
+	if limit > len(mods) {
+		limit = len(mods)
+	}
+	fmt.Println("files too many things depend on, or that depend on too much:")
+	for _, m := range mods[:limit] {
+		fmt.Printf("  in=%-3d out=%-3d %s\n", m.FanIn, m.FanOut, m.File)
+	}
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -156,6 +177,8 @@ func main() {
 		os.Exit(deadCmd(os.Args[2:]))
 	case "cycles":
 		os.Exit(cyclesCmd(os.Args[2:]))
+	case "god":
+		os.Exit(godCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)

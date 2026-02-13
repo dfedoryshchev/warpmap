@@ -82,3 +82,32 @@ func Cycles(g Graph) [][]string {
 	}
 	return cycles
 }
+
+type Module struct {
+	File   string
+	FanIn  int
+	FanOut int
+}
+
+// GodModules ranks files by fan-in + fan-out: too many things depend on it, or it
+// depends on too much. high scores are architectural risk - a change there is hard
+// to reason about because it touches (or is touched by) half the codebase.
+func GodModules(g Graph) []Module {
+	in := map[string]int{}
+	out := map[string]int{}
+	for _, e := range g.Edges {
+		out[e.From]++
+		in[e.To]++
+	}
+	var mods []Module
+	for _, f := range g.Files {
+		if in[f]+out[f] == 0 {
+			continue
+		}
+		mods = append(mods, Module{File: f, FanIn: in[f], FanOut: out[f]})
+	}
+	sort.Slice(mods, func(i, j int) bool {
+		return mods[i].FanIn+mods[i].FanOut > mods[j].FanIn+mods[j].FanOut
+	})
+	return mods
+}
