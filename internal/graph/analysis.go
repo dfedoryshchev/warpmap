@@ -44,6 +44,9 @@ func isEntryPoint(f string) bool {
 func Cycles(g Graph) [][]string {
 	adj := map[string][]string{}
 	for _, e := range g.Edges {
+		if e.From == e.To {
+			continue // a file that re-exports itself is not a real cycle
+		}
 		adj[e.From] = append(adj[e.From], e.To)
 	}
 	const (
