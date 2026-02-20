@@ -20,7 +20,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "commands: hotspots | analyze | trace | dead | cycles  (all take <dir>)")
 }
 
-var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true}
+var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
 
 func sourceFiles(dir string) []string {
 	var out []string
