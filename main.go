@@ -71,6 +71,7 @@ func hotspotsCmd(args []string) int {
 func analyzeCmd(args []string) int {
 	fset := flag.NewFlagSet("analyze", flag.ExitOnError)
 	asJSON := fset.Bool("json", false, "print the full graph as json")
+	asDot := fset.Bool("dot", false, "print the graph as graphviz dot")
 	fset.Parse(args)
 	dir := fset.Arg(0)
 	if dir == "" {
@@ -78,13 +79,16 @@ func analyzeCmd(args []string) int {
 		return 2
 	}
 	g := graph.Build(sourceFiles(dir))
-	if *asJSON {
+	switch {
+	case *asJSON:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		enc.Encode(g)
-		return 0
+	case *asDot:
+		fmt.Print(graph.ToDot(g))
+	default:
+		fmt.Printf("%d files, %d import edges\n", len(g.Files), len(g.Edges))
 	}
-	fmt.Printf("%d files, %d import edges\n", len(g.Files), len(g.Edges))
 	return 0
 }
 
