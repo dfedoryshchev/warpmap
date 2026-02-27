@@ -101,17 +101,17 @@ func resolvePy(fromFile, spec string) string {
 // --- dispatch by extension ---
 
 func extractImports(path, src string) []string {
-	if filepath.Ext(path) == ".py" {
-		return extractPy(src)
+	if l, ok := langFor(path); ok {
+		return l.extract(src)
 	}
-	return extractTs(src)
+	return nil
 }
 
 func resolve(fromFile, spec string) string {
-	if filepath.Ext(fromFile) == ".py" {
-		return resolvePy(fromFile, spec)
+	if l, ok := langFor(fromFile); ok {
+		return l.resolve(fromFile, spec)
 	}
-	return resolveTs(fromFile, spec)
+	return ""
 }
 
 func exists(p string) bool {
