@@ -11,6 +11,7 @@ import (
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
+	"github.com/dfedoryshchev/warpmap/internal/report"
 	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
@@ -165,6 +166,32 @@ func godCmd(args []string) int {
 	return 0
 }
 
+func reportCmd(args []string) int {
+	fset := flag.NewFlagSet("report", flag.ExitOnError)
+	out := fset.String("o", "", "write to a file instead of stdout")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap report <dir>")
+		return 2
+	}
+	files := sourceFiles(dir)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	md := report.Build(dir, files, churn).Markdown()
+	if *out != "" {
+		if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	} else {
+		fmt.Print(md)
+	}
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -183,6 +210,8 @@ func main() {
 		os.Exit(cyclesCmd(os.Args[2:]))
 	case "god":
 		os.Exit(godCmd(os.Args[2:]))
+	case "report":
+		os.Exit(reportCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
