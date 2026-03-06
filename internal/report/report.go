@@ -13,6 +13,7 @@ type Report struct {
 	Files    int
 	Edges    int
 	Hotspots []metrics.Hotspot
+	Findings []Finding
 }
 
 // Build runs the analyses and assembles a report for a project.
@@ -23,6 +24,7 @@ func Build(dir string, files []string, churn metrics.Churn) Report {
 		Files:    len(g.Files),
 		Edges:    len(g.Edges),
 		Hotspots: metrics.Hotspots(dir, files, churn),
+		Findings: Findings(g),
 	}
 }
 
@@ -36,7 +38,16 @@ func top(h []metrics.Hotspot, n int) []metrics.Hotspot {
 func (r Report) Markdown() string {
 	var b strings.Builder
 	b.WriteString("# warpmap audit\n\n")
-	fmt.Fprintf(&b, "- files: %d\n- import edges: %d\n\n", r.Files, r.Edges)
+	fmt.Fprintf(&b, "- files: %d\n- import edges: %d\n- findings: %d\n\n", r.Files, r.Edges, len(r.Findings))
+
+	if len(r.Findings) > 0 {
+		b.WriteString("## findings\n\n")
+		for _, f := range r.Findings {
+			fmt.Fprintf(&b, "- **[%s] %s** - %s\n  - %s\n", f.Severity, f.Kind, f.Detail, f.Recommendation)
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString("## hotspots\n\n")
 	b.WriteString("| score | churn | complexity | file |\n| ----- | ----- | ---------- | ---- |\n")
 	for _, h := range top(r.Hotspots, 10) {
