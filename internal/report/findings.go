@@ -2,6 +2,7 @@ package report
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 )
@@ -21,8 +22,16 @@ type Finding struct {
 	Recommendation string
 }
 
+func relPath(dir, f string) string {
+	r, err := filepath.Rel(dir, f)
+	if err != nil {
+		return f
+	}
+	return filepath.ToSlash(r)
+}
+
 // Findings turns the graph analyses into ranked, actionable findings.
-func Findings(g graph.Graph) []Finding {
+func Findings(g graph.Graph, dir string) []Finding {
 	var fs []Finding
 	for _, m := range graph.GodModules(g) {
 		if m.FanIn+m.FanOut < 20 {
@@ -31,7 +40,7 @@ func Findings(g graph.Graph) []Finding {
 		fs = append(fs, Finding{
 			Severity:       High,
 			Kind:           "god-module",
-			Detail:         fmt.Sprintf("%s (in=%d out=%d)", m.File, m.FanIn, m.FanOut),
+			Detail:         fmt.Sprintf("%s (in=%d out=%d)", relPath(dir, m.File), m.FanIn, m.FanOut),
 			Recommendation: "too central; a change here has a wide blast radius - split responsibilities",
 		})
 	}

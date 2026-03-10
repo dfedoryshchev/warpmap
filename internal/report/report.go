@@ -24,7 +24,7 @@ func Build(dir string, files []string, churn metrics.Churn) Report {
 		Files:    len(g.Files),
 		Edges:    len(g.Edges),
 		Hotspots: metrics.Hotspots(dir, files, churn),
-		Findings: Findings(g),
+		Findings: Findings(g, dir),
 	}
 }
 
@@ -51,7 +51,7 @@ func (r Report) Markdown() string {
 	b.WriteString("## hotspots\n\n")
 	b.WriteString("| score | churn | complexity | file |\n| ----- | ----- | ---------- | ---- |\n")
 	for _, h := range top(r.Hotspots, 10) {
-		fmt.Fprintf(&b, "| %.3f | %d | %d | %s |\n", h.Score, h.Churn, h.Complexity, h.File)
+		fmt.Fprintf(&b, "| %.3f | %d | %d | %s |\n", h.Score, h.Churn, h.Complexity, relPath(r.Dir, h.File))
 	}
 	return b.String()
 }
