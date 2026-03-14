@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dfedoryshchev/warpmap/internal/baseline"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
@@ -166,6 +167,24 @@ func godCmd(args []string) int {
 	return 0
 }
 
+func baselineCmd(args []string) int {
+	fset := flag.NewFlagSet("baseline", flag.ExitOnError)
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap baseline <dir>")
+		return 2
+	}
+	snap := baseline.Capture(dir, sourceFiles(dir))
+	if err := baseline.Save(dir, snap); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("baseline saved: %d files, %d edges, %d cycles, %d god-modules\n",
+		snap.Files, snap.Edges, snap.Cycles, snap.GodModules)
+	return 0
+}
+
 func reportCmd(args []string) int {
 	fset := flag.NewFlagSet("report", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
@@ -212,6 +231,8 @@ func main() {
 		os.Exit(godCmd(os.Args[2:]))
 	case "report":
 		os.Exit(reportCmd(os.Args[2:]))
+	case "baseline":
+		os.Exit(baselineCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
