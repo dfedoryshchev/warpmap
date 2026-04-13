@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
@@ -75,4 +76,53 @@ func Load(dir string) (Snapshot, error) {
 		return s, err
 	}
 	return s, json.Unmarshal(data, &s)
+}
+
+type Change struct {
+	File   string
+	Before int
+	After  int
+}
+
+// Diff is the ratchet: how the codebase moved between the baseline and now.
+type Diff struct {
+	Edges      int // deltas (after - before); positive = grew
+	Cycles     int
+	Orphans    int
+	GodModules int
+	Worsened   []Change // files whose complexity went up
+	Improved   []Change // files whose complexity went down
+}
+
+// RiskUp reports whether the change made the codebase harder to work on safely.
+func (d Diff) RiskUp() bool {
+	return d.Cycles > 0 || d.GodModules > 0 || len(d.Worsened) > len(d.Improved)
+}
+
+func Compare(before, after Snapshot) Diff {
+	d := Diff{
+		Edges:      after.Edges - before.Edges,
+		Cycles:     after.Cycles - before.Cycles,
+		Orphans:    after.Orphans - before.Orphans,
+		GodModules: after.GodModules - before.GodModules,
+	}
+	for f, a := range after.Complexity {
+		b, ok := before.Complexity[f]
+		if !ok {
+			continue // a file with no baseline is not a regression
+		}
+		switch {
+		case a > b:
+			d.Worsened = append(d.Worsened, Change{f, b, a})
+		case a < b:
+			d.Improved = append(d.Improved, Change{f, b, a})
+		}
+	}
+	sort.Slice(d.Worsened, func(i, j int) bool {
+		return d.Worsened[i].After-d.Worsened[i].Before > d.Worsened[j].After-d.Worsened[j].Before
+	})
+	sort.Slice(d.Improved, func(i, j int) bool {
+		return d.Improved[i].Before-d.Improved[i].After > d.Improved[j].Before-d.Improved[j].After
+	})
+	return d
 }

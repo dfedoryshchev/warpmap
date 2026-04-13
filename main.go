@@ -167,6 +167,36 @@ func godCmd(args []string) int {
 	return 0
 }
 
+func diffCmd(args []string) int {
+	fset := flag.NewFlagSet("diff", flag.ExitOnError)
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap diff <dir>  (compares against .warpmap/baseline.json)")
+		return 2
+	}
+	before, err := baseline.Load(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "no baseline; run `warpmap baseline %s` first\n", dir)
+		return 1
+	}
+	d := baseline.Compare(before, baseline.Capture(dir, sourceFiles(dir)))
+	fmt.Printf("since baseline: edges %+d, cycles %+d, orphans %+d, god-modules %+d\n",
+		d.Edges, d.Cycles, d.Orphans, d.GodModules)
+	if len(d.Worsened) > 0 {
+		fmt.Printf("%d files got more complex:\n", len(d.Worsened))
+		for _, c := range d.Worsened[:min(5, len(d.Worsened))] {
+			fmt.Printf("  +%d  %s\n", c.After-c.Before, c.File)
+		}
+	}
+	if d.RiskUp() {
+		fmt.Println("verdict: RISK UP - this change made the codebase harder to work on safely")
+		return 1
+	}
+	fmt.Println("verdict: ok - no net degradation")
+	return 0
+}
+
 func baselineCmd(args []string) int {
 	fset := flag.NewFlagSet("baseline", flag.ExitOnError)
 	fset.Parse(args)
@@ -233,6 +263,8 @@ func main() {
 		os.Exit(reportCmd(os.Args[2:]))
 	case "baseline":
 		os.Exit(baselineCmd(os.Args[2:]))
+	case "diff":
+		os.Exit(diffCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
