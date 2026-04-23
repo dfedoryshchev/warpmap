@@ -7,9 +7,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
+	"github.com/dfedoryshchev/warpmap/internal/coverage"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
@@ -167,6 +169,37 @@ func godCmd(args []string) int {
 	return 0
 }
 
+func testgapCmd(args []string) int {
+	fset := flag.NewFlagSet("testgap", flag.ExitOnError)
+	top := fset.Int("n", 15, "how many to show")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap testgap <dir>")
+		return 2
+	}
+	g := graph.Build(sourceFiles(dir))
+	type row struct {
+		file  string
+		blast int
+	}
+	var rows []row
+	for _, f := range coverage.Untested(g) {
+		rows = append(rows, row{f, len(trace.BlastRadius(g, f, 0))})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].blast > rows[j].blast })
+	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(rows))
+	limit := *top
+	if limit > len(rows) {
+		limit = len(rows)
+	}
+	for _, r := range rows[:limit] {
+		rel, _ := filepath.Rel(dir, r.file)
+		fmt.Printf("  blast=%-4d %s\n", r.blast, filepath.ToSlash(rel))
+	}
+	return 0
+}
+
 func diffCmd(args []string) int {
 	fset := flag.NewFlagSet("diff", flag.ExitOnError)
 	fset.Parse(args)
@@ -265,6 +298,8 @@ func main() {
 		os.Exit(baselineCmd(os.Args[2:]))
 	case "diff":
 		os.Exit(diffCmd(os.Args[2:]))
+	case "testgap":
+		os.Exit(testgapCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
