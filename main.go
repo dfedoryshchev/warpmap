@@ -200,6 +200,38 @@ func testgapCmd(args []string) int {
 	return 0
 }
 
+func ownershipCmd(args []string) int {
+	fset := flag.NewFlagSet("ownership", flag.ExitOnError)
+	top := fset.Int("n", 15, "how many hotspots to check")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap ownership <dir>")
+		return 2
+	}
+	files := sourceFiles(dir)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	ranked := metrics.Hotspots(dir, files, churn)
+	limit := *top
+	if limit > len(ranked) {
+		limit = len(ranked)
+	}
+	fmt.Println("hotspots by knowledge spread (bus-factor-1 = only one person has touched it):")
+	for _, h := range ranked[:limit] {
+		owners := metrics.Owners(dir, h.File)
+		rel, _ := filepath.Rel(dir, h.File)
+		flag := ""
+		if len(owners) == 1 {
+			flag = "  <- bus factor 1"
+		}
+		fmt.Printf("  authors=%-2d %s%s\n", len(owners), filepath.ToSlash(rel), flag)
+	}
+	return 0
+}
+
 func diffCmd(args []string) int {
 	fset := flag.NewFlagSet("diff", flag.ExitOnError)
 	fset.Parse(args)
@@ -300,6 +332,8 @@ func main() {
 		os.Exit(diffCmd(os.Args[2:]))
 	case "testgap":
 		os.Exit(testgapCmd(os.Args[2:]))
+	case "ownership":
+		os.Exit(ownershipCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
