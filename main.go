@@ -200,6 +200,46 @@ func testgapCmd(args []string) int {
 	return 0
 }
 
+func riskCmd(args []string) int {
+	fset := flag.NewFlagSet("risk", flag.ExitOnError)
+	fset.Parse(args)
+	rest := fset.Args()
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: warpmap risk <dir> <file>...  (the files you are about to change)")
+		return 2
+	}
+	dir, changed := rest[0], rest[1:]
+	g := graph.Build(sourceFiles(dir))
+	untested := map[string]bool{}
+	for _, f := range coverage.Untested(g) {
+		untested[f] = true
+	}
+	blast := map[string]bool{}
+	risky := 0
+	for _, cf := range changed {
+		abs := filepath.Join(dir, cf)
+		br := trace.BlastRadius(g, abs, 0)
+		for _, b := range br {
+			blast[b] = true
+		}
+		tag := "tested"
+		if untested[abs] {
+			tag = "UNTESTED"
+		}
+		fmt.Printf("  %s: blast=%d, %s\n", cf, len(br), tag)
+		if len(br) > 10 && untested[abs] {
+			risky++
+		}
+	}
+	fmt.Printf("combined blast radius: %d files\n", len(blast))
+	if risky > 0 {
+		fmt.Printf("verdict: %d changed file(s) are high-blast AND untested - add tests before changing\n", risky)
+		return 1
+	}
+	fmt.Println("verdict: manageable")
+	return 0
+}
+
 func ownershipCmd(args []string) int {
 	fset := flag.NewFlagSet("ownership", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many hotspots to check")
@@ -334,6 +374,8 @@ func main() {
 		os.Exit(testgapCmd(os.Args[2:]))
 	case "ownership":
 		os.Exit(ownershipCmd(os.Args[2:]))
+	case "risk":
+		os.Exit(riskCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
