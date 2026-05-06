@@ -12,6 +12,7 @@ import (
 
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
+	"github.com/dfedoryshchev/warpmap/internal/explain"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
@@ -200,6 +201,36 @@ func testgapCmd(args []string) int {
 	return 0
 }
 
+func explainCmd(args []string) int {
+	fset := flag.NewFlagSet("explain", flag.ExitOnError)
+	top := fset.Int("n", 1, "how many hotspots to explain")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap explain <dir>  (set ANTHROPIC_API_KEY + WARPMAP_MODEL, or runs offline)")
+		return 2
+	}
+	files := sourceFiles(dir)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	g := graph.Build(files)
+	ranked := metrics.Hotspots(dir, files, churn)
+	opts := explain.Options{Model: os.Getenv("WARPMAP_MODEL"), APIKey: os.Getenv("ANTHROPIC_API_KEY")}
+	limit := *top
+	if limit > len(ranked) {
+		limit = len(ranked)
+	}
+	for _, h := range ranked[:limit] {
+		blast := len(trace.BlastRadius(g, h.File, 0))
+		rel, _ := filepath.Rel(dir, h.File)
+		name := filepath.ToSlash(rel)
+		fmt.Printf("\n## %s\n%s\n", name, explain.Hotspot(name, h.Churn, h.Complexity, blast, opts))
+	}
+	return 0
+}
+
 func riskCmd(args []string) int {
 	fset := flag.NewFlagSet("risk", flag.ExitOnError)
 	fset.Parse(args)
@@ -376,6 +407,8 @@ func main() {
 		os.Exit(ownershipCmd(os.Args[2:]))
 	case "risk":
 		os.Exit(riskCmd(os.Args[2:]))
+	case "explain":
+		os.Exit(explainCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
