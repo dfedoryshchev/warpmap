@@ -201,6 +201,52 @@ func testgapCmd(args []string) int {
 	return 0
 }
 
+func briefCmd(args []string) int {
+	fset := flag.NewFlagSet("brief", flag.ExitOnError)
+	fset.Parse(args)
+	rest := fset.Args()
+	if len(rest) < 2 {
+		fmt.Fprintln(os.Stderr, "usage: warpmap brief <dir> <file>  (a context pack to hand an agent)")
+		return 2
+	}
+	dir, file := rest[0], rest[1]
+	abs := filepath.Join(dir, file)
+	files := sourceFiles(dir)
+	g := graph.Build(files)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	ranked := metrics.Hotspots(dir, files, churn)
+	rank, h := 0, metrics.Hotspot{}
+	for i, r := range ranked {
+		if r.File == abs {
+			rank, h = i+1, r
+			break
+		}
+	}
+	untested := map[string]bool{}
+	for _, f := range coverage.Untested(g) {
+		untested[f] = true
+	}
+	blast := trace.BlastRadius(g, abs, 0)
+	owners := metrics.Owners(dir, abs)
+
+	fmt.Printf("# brief: %s\n\n", file)
+	fmt.Printf("- hotspot rank: %d of %d (churn %d, complexity %d)\n", rank, len(ranked), h.Churn, h.Complexity)
+	fmt.Printf("- blast radius: %d files depend on this - changing it can ripple widely\n", len(blast))
+	fmt.Printf("- authors who have touched it: %d%s\n", len(owners), map[bool]string{true: " (bus factor 1)", false: ""}[len(owners) == 1])
+	fmt.Printf("- has a test importing it: %v\n", !untested[abs])
+	if len(blast) > 0 {
+		fmt.Println("\nread the heaviest dependents before you change it:")
+		for _, b := range blast[:min(8, len(blast))] {
+			rel, _ := filepath.Rel(dir, b)
+			fmt.Printf("  - %s\n", filepath.ToSlash(rel))
+		}
+	}
+	return 0
+}
+
 func explainCmd(args []string) int {
 	fset := flag.NewFlagSet("explain", flag.ExitOnError)
 	top := fset.Int("n", 1, "how many hotspots to explain")
@@ -409,6 +455,8 @@ func main() {
 		os.Exit(riskCmd(os.Args[2:]))
 	case "explain":
 		os.Exit(explainCmd(os.Args[2:]))
+	case "brief":
+		os.Exit(briefCmd(os.Args[2:]))
 	default:
 		usage()
 		os.Exit(2)
