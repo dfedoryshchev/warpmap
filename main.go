@@ -14,6 +14,7 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
 	"github.com/dfedoryshchev/warpmap/internal/explain"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
+	"github.com/dfedoryshchev/warpmap/internal/mcp"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
 	"github.com/dfedoryshchev/warpmap/internal/trace"
@@ -457,6 +458,8 @@ func main() {
 		os.Exit(explainCmd(os.Args[2:]))
 	case "brief":
 		os.Exit(briefCmd(os.Args[2:]))
+	case "mcp":
+		mcp.Serve(sourceFiles)
 	default:
 		usage()
 		os.Exit(2)
