@@ -23,7 +23,22 @@ import (
 func usage() {
 	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
 	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands: hotspots | analyze | trace | dead | cycles  (all take <dir>)")
+	fmt.Fprintln(os.Stderr, "commands:")
+	fmt.Fprintln(os.Stderr, "  analyze <dir>          dependency graph (--json, --dot)")
+	fmt.Fprintln(os.Stderr, "  hotspots <dir>         rank files by churn x complexity")
+	fmt.Fprintln(os.Stderr, "  trace <dir> <file>     blast radius of a file (--depth)")
+	fmt.Fprintln(os.Stderr, "  dead <dir>             files nothing imports")
+	fmt.Fprintln(os.Stderr, "  cycles <dir>           import cycles")
+	fmt.Fprintln(os.Stderr, "  god <dir>              files with high fan-in/out")
+	fmt.Fprintln(os.Stderr, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
+	fmt.Fprintln(os.Stderr, "  testgap <dir>          untested files ranked by blast radius")
+	fmt.Fprintln(os.Stderr, "  report <dir>           full markdown audit (-o file)")
+	fmt.Fprintln(os.Stderr, "  baseline <dir>         save a snapshot for later comparison")
+	fmt.Fprintln(os.Stderr, "  diff <dir>             ratchet: better or worse since the baseline")
+	fmt.Fprintln(os.Stderr, "  risk <dir> <file>...   blast radius + test gaps for a change")
+	fmt.Fprintln(os.Stderr, "  brief <dir> <file>     a context pack to hand an agent")
+	fmt.Fprintln(os.Stderr, "  explain <dir>          narrate the top hotspot (LLM, offline fallback)")
+	fmt.Fprintln(os.Stderr, "  mcp                    run as an MCP server over stdio")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
