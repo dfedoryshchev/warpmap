@@ -14,7 +14,8 @@ go install github.com/dfedoryshchev/warpmap@latest
 ```
 
 or build from source with `go build -o warpmap .`. pure Go standard library - no runtime
-dependencies, one static binary.
+dependencies, one static binary. `warpmap help` lists every command, `warpmap version` prints
+the version.
 
 ## what it does
 
@@ -42,3 +43,7 @@ multi-language: TypeScript / JavaScript / Python today.
 
 most bugs in unfamiliar code come from not seeing what a change will ripple into. warpmap makes
 "look before you leap" a command - and a CI gate.
+
+## license
+
+MIT. see [LICENSE](LICENSE); release notes are in [CHANGELOG.md](CHANGELOG.md).

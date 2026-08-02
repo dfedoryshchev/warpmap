@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -20,25 +21,32 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
-func usage() {
-	fmt.Fprintln(os.Stderr, "warpmap: map a codebase before you change it")
-	fmt.Fprintln(os.Stderr, "usage: warpmap <command> [args]")
-	fmt.Fprintln(os.Stderr, "commands:")
-	fmt.Fprintln(os.Stderr, "  analyze <dir>          dependency graph (--json, --dot)")
-	fmt.Fprintln(os.Stderr, "  hotspots <dir>         rank files by churn x complexity")
-	fmt.Fprintln(os.Stderr, "  trace <dir> <file>     blast radius of a file (--depth)")
-	fmt.Fprintln(os.Stderr, "  dead <dir>             files nothing imports")
-	fmt.Fprintln(os.Stderr, "  cycles <dir>           import cycles")
-	fmt.Fprintln(os.Stderr, "  god <dir>              files with high fan-in/out")
-	fmt.Fprintln(os.Stderr, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
-	fmt.Fprintln(os.Stderr, "  testgap <dir>          untested files ranked by blast radius")
-	fmt.Fprintln(os.Stderr, "  report <dir>           full markdown audit (-o file)")
-	fmt.Fprintln(os.Stderr, "  baseline <dir>         save a snapshot for later comparison")
-	fmt.Fprintln(os.Stderr, "  diff <dir>             ratchet: better or worse since the baseline")
-	fmt.Fprintln(os.Stderr, "  risk <dir> <file>...   blast radius + test gaps for a change")
-	fmt.Fprintln(os.Stderr, "  brief <dir> <file>     a context pack to hand an agent")
-	fmt.Fprintln(os.Stderr, "  explain <dir>          narrate the top hotspot (LLM, offline fallback)")
-	fmt.Fprintln(os.Stderr, "  mcp                    run as an MCP server over stdio")
+// version is the single source of truth for the release string: the CLI prints it and
+// the MCP server reports it in the initialize handshake.
+const version = "0.1.0"
+
+// usage writes the command list to w - stdout when the user asked for help, stderr when
+// warpmap is correcting them.
+func usage(w io.Writer) {
+	fmt.Fprintln(w, "warpmap: map a codebase before you change it")
+	fmt.Fprintln(w, "usage: warpmap <command> [args]")
+	fmt.Fprintln(w, "commands:")
+	fmt.Fprintln(w, "  analyze <dir>          dependency graph (--json, --dot)")
+	fmt.Fprintln(w, "  hotspots <dir>         rank files by churn x complexity")
+	fmt.Fprintln(w, "  trace <dir> <file>     blast radius of a file (--depth)")
+	fmt.Fprintln(w, "  dead <dir>             files nothing imports")
+	fmt.Fprintln(w, "  cycles <dir>           import cycles")
+	fmt.Fprintln(w, "  god <dir>              files with high fan-in/out")
+	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
+	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
+	fmt.Fprintln(w, "  report <dir>           full markdown audit (-o file)")
+	fmt.Fprintln(w, "  baseline <dir>         save a snapshot for later comparison")
+	fmt.Fprintln(w, "  diff <dir>             ratchet: better or worse since the baseline")
+	fmt.Fprintln(w, "  risk <dir> <file>...   blast radius + test gaps for a change")
+	fmt.Fprintln(w, "  brief <dir> <file>     a context pack to hand an agent")
+	fmt.Fprintln(w, "  explain <dir>          narrate the top hotspot (LLM, offline fallback)")
+	fmt.Fprintln(w, "  mcp                    run as an MCP server over stdio")
+	fmt.Fprintln(w, "  help, version          this list, or the version")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
@@ -441,7 +449,7 @@ func reportCmd(args []string) int {
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
+		usage(os.Stderr)
 		os.Exit(2)
 	}
 	switch os.Args[1] {
@@ -474,9 +482,14 @@ func main() {
 	case "brief":
 		os.Exit(briefCmd(os.Args[2:]))
 	case "mcp":
-		mcp.Serve(sourceFiles)
+		mcp.Serve(version, sourceFiles)
+	case "help", "-h", "--help":
+		usage(os.Stdout)
+	case "version", "-version", "--version":
+		fmt.Println("warpmap " + version)
 	default:
-		usage()
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
+		usage(os.Stderr)
 		os.Exit(2)
 	}
 }

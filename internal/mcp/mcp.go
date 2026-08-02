@@ -45,9 +45,10 @@ func toolSpecs() []map[string]any {
 	}
 }
 
-// Serve runs a minimal MCP server (newline-delimited JSON-RPC over stdio). sources
-// returns the source files under a directory (injected so this package stays small).
-func Serve(sources func(string) []string) {
+// Serve runs a minimal MCP server (newline-delimited JSON-RPC over stdio). version is
+// reported in the initialize handshake; sources returns the source files under a
+// directory (injected so this package stays small).
+func Serve(version string, sources func(string) []string) {
 	sc := bufio.NewScanner(os.Stdin)
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	for sc.Scan() {
@@ -64,7 +65,7 @@ func Serve(sources func(string) []string) {
 			reply(req.ID, map[string]any{
 				"protocolVersion": "2024-11-05",
 				"capabilities":    map[string]any{"tools": map[string]any{}},
-				"serverInfo":      map[string]any{"name": "warpmap", "version": "0.1.0"},
+				"serverInfo":      map[string]any{"name": "warpmap", "version": version},
 			})
 		case "tools/list":
 			reply(req.ID, map[string]any{"tools": toolSpecs()})
