@@ -72,6 +72,20 @@ func sourceFiles(dir string) []string {
 	return out
 }
 
+// rel turns a path the source walk produced into the one spelling every
+// command prints: relative to the analysed directory, forward slashes. half of
+// them used to print the walk's own path, so the same file read as
+// `..\proj\src\a.ts` from hotspots and `src/a.ts` from testgap, and neither the
+// eye nor a grep could match the two. it wants the walk's path; a path that is
+// already relative to the project would be relativised a second time.
+func rel(dir, f string) string {
+	r, err := filepath.Rel(dir, f)
+	if err != nil {
+		return filepath.ToSlash(f)
+	}
+	return filepath.ToSlash(r)
+}
+
 func hotspotsCmd(args []string) int {
 	fset := flag.NewFlagSet("hotspots", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
@@ -92,7 +106,7 @@ func hotspotsCmd(args []string) int {
 		limit = len(ranked)
 	}
 	for _, h := range ranked[:limit] {
-		fmt.Printf("%.3f  churn=%-3d cx=%-4d %s\n", h.Score, h.Churn, h.Complexity, h.File)
+		fmt.Printf("%.3f  churn=%-3d cx=%-4d %s\n", h.Score, h.Churn, h.Complexity, rel(dir, h.File))
 	}
 	return 0
 }
@@ -136,7 +150,7 @@ func traceCmd(args []string) int {
 	affected := trace.BlastRadius(g, target, *depth)
 	fmt.Printf("%d files depend on %s\n", len(affected), file)
 	for _, f := range affected {
-		fmt.Printf("  %s\n", f)
+		fmt.Printf("  %s\n", rel(dir, f))
 	}
 	return 0
 }
@@ -152,7 +166,7 @@ func deadCmd(args []string) int {
 	orphans := graph.Orphans(graph.Build(sourceFiles(dir)))
 	fmt.Printf("%d files nothing imports (candidate dead code):\n", len(orphans))
 	for _, f := range orphans {
-		fmt.Printf("  %s\n", f)
+		fmt.Printf("  %s\n", rel(dir, f))
 	}
 	return 0
 }
@@ -168,7 +182,11 @@ func cyclesCmd(args []string) int {
 	cycles := graph.Cycles(graph.Build(sourceFiles(dir)))
 	fmt.Printf("%d import cycles:\n", len(cycles))
 	for _, c := range cycles {
-		fmt.Printf("  %s\n", strings.Join(c, " -> "))
+		hop := make([]string, len(c))
+		for i, f := range c {
+			hop[i] = rel(dir, f)
+		}
+		fmt.Printf("  %s\n", strings.Join(hop, " -> "))
 	}
 	return 0
 }
@@ -189,7 +207,7 @@ func godCmd(args []string) int {
 	}
 	fmt.Println("files too many things depend on, or that depend on too much:")
 	for _, m := range mods[:limit] {
-		fmt.Printf("  in=%-3d out=%-3d %s\n", m.FanIn, m.FanOut, m.File)
+		fmt.Printf("  in=%-3d out=%-3d %s\n", m.FanIn, m.FanOut, rel(dir, m.File))
 	}
 	return 0
 }
@@ -219,8 +237,7 @@ func testgapCmd(args []string) int {
 		limit = len(rows)
 	}
 	for _, r := range rows[:limit] {
-		rel, _ := filepath.Rel(dir, r.file)
-		fmt.Printf("  blast=%-4d %s\n", r.blast, filepath.ToSlash(rel))
+		fmt.Printf("  blast=%-4d %s\n", r.blast, rel(dir, r.file))
 	}
 	return 0
 }
@@ -264,8 +281,7 @@ func briefCmd(args []string) int {
 	if len(blast) > 0 {
 		fmt.Println("\nread the heaviest dependents before you change it:")
 		for _, b := range blast[:min(8, len(blast))] {
-			rel, _ := filepath.Rel(dir, b)
-			fmt.Printf("  - %s\n", filepath.ToSlash(rel))
+			fmt.Printf("  - %s\n", rel(dir, b))
 		}
 	}
 	return 0
@@ -294,8 +310,7 @@ func explainCmd(args []string) int {
 	}
 	for _, h := range ranked[:limit] {
 		blast := len(trace.BlastRadius(g, h.File, 0))
-		rel, _ := filepath.Rel(dir, h.File)
-		name := filepath.ToSlash(rel)
+		name := rel(dir, h.File)
 		fmt.Printf("\n## %s\n%s\n", name, explain.Hotspot(name, h.Churn, h.Complexity, blast, opts))
 	}
 	return 0
@@ -363,12 +378,11 @@ func ownershipCmd(args []string) int {
 	fmt.Println("hotspots by knowledge spread (bus-factor-1 = only one person has touched it):")
 	for _, h := range ranked[:limit] {
 		owners := metrics.Owners(dir, h.File)
-		rel, _ := filepath.Rel(dir, h.File)
-		flag := ""
+		note := ""
 		if len(owners) == 1 {
-			flag = "  <- bus factor 1"
+			note = "  <- bus factor 1"
 		}
-		fmt.Printf("  authors=%-2d %s%s\n", len(owners), filepath.ToSlash(rel), flag)
+		fmt.Printf("  authors=%-2d %s%s\n", len(owners), rel(dir, h.File), note)
 	}
 	return 0
 }
@@ -391,6 +405,8 @@ func diffCmd(args []string) int {
 		d.Edges, d.Cycles, d.Orphans, d.GodModules)
 	if len(d.Worsened) > 0 {
 		fmt.Printf("%d files got more complex:\n", len(d.Worsened))
+		// not rel(): a baseline snapshot already stores its keys relative to the
+		// project and slashed, so these are in the wanted spelling already.
 		for _, c := range d.Worsened[:min(5, len(d.Worsened))] {
 			fmt.Printf("  +%d  %s\n", c.After-c.Before, c.File)
 		}
