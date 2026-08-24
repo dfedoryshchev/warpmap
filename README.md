@@ -13,9 +13,88 @@ i have used on real codebases since 2025.
 go install github.com/dfedoryshchev/warpmap@latest
 ```
 
-or build from source with `go build -o warpmap .`. pure Go standard library - no runtime
-dependencies, one static binary. `warpmap help` lists every command, `warpmap version` prints
-the version.
+or from a clone, `go build -o warpmap .`. pure Go standard library - no runtime dependencies,
+one static binary, nothing to configure. check it landed:
+
+```
+$ warpmap version
+warpmap 0.1.0
+```
+
+`warpmap help` lists every command.
+
+## your first audit
+
+point it at a repo you did not write and work from the project root. churn comes out of
+`git log`, so the directory has to be a git checkout - without history every hotspot scores
+0.000 and the ranking tells you nothing.
+
+the numbers below are from a small sample project, so they are small. the shape is the point.
+
+start with the size of the thing:
+
+```
+$ warpmap analyze .
+8 files, 7 import edges
+```
+
+then ask what to be careful with. `hotspots` ranks by churn x complexity - the files that keep
+changing AND are hard to read:
+
+```
+$ warpmap hotspots .
+1.000  churn=5   cx=25   src/store/session.ts
+0.360  churn=3   cx=15   src/api/client.ts
+0.096  churn=2   cx=6    src/ui/Widget.tsx
+0.072  churn=1   cx=9    src/util/format.ts
+```
+
+churn is how many commits touched the file in the last 6 months. cx is a structural proxy -
+non-blank lines plus branch keywords - not cyclomatic complexity. the score is normalised
+against the worst churn and the worst complexity in this run, so it ranks files within one
+repo and means nothing between two.
+
+before you touch the top file, find out what it drags with it:
+
+```
+$ warpmap trace . src/store/session.ts
+3 files depend on src/store/session.ts
+  src/store/index.ts
+  src/ui/Widget.tsx
+  tests/session.test.ts
+```
+
+and where the tests are not:
+
+```
+$ warpmap testgap .
+6 untested files; the riskiest (highest blast radius) first - test these before you change them:
+  blast=5    src/api/client.ts
+  blast=4    src/api/index.ts
+  blast=4    src/util/format.ts
+```
+
+that is the whole audit loop: what is risky, what depends on it, what is untested.
+`warpmap report . -o audit.md` writes the same findings to one markdown file you can hand
+to someone else.
+
+### then keep it from getting worse
+
+snapshot the state you inherited, change something, and ask whether it got better or worse:
+
+```
+$ warpmap baseline .
+baseline saved: 8 files, 7 edges, 0 cycles, 0 god-modules
+
+$ warpmap diff .
+since baseline: edges +0, cycles +0, orphans +0, god-modules +0
+1 files got more complex:
+  +18  src/store/session.ts
+verdict: RISK UP - this change made the codebase harder to work on safely
+```
+
+`diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the
+snapshot is a single file, `.warpmap/baseline.json`.
 
 ## what it does
 
