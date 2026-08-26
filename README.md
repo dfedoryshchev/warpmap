@@ -118,6 +118,30 @@ snapshot is a single file, `.warpmap/baseline.json`.
 
 multi-language: TypeScript / JavaScript / Python today.
 
+## configuration (optional)
+
+drop a `warpmap.json` in the directory you analyse. every project works without one, and a
+project that has none behaves exactly as it did before the file was supported.
+
+```json
+{
+  "ignore": ["vendor", "src/generated"],
+  "thresholds": { "blast": 10 }
+}
+```
+
+`ignore` adds to the directories always skipped (`node_modules`, `.git`, `dist`, `build`); it
+does not replace them, so listing your own does not bring `.git` back. a pattern with no slash
+matches a directory of that name at any depth, the way the built-ins do; a pattern with a slash
+is anchored where you wrote it, so `src/generated` skips that one and leaves `lib/generated`
+alone.
+
+`thresholds.blast` is where `risk` starts calling a change risky: a file with more than this
+many dependents, and no test, is what it reports and exits non-zero on. the default is 10.
+
+a malformed `warpmap.json` stops the command rather than being worked around. the numbers decide
+what the tool reports, so guessing them is worse than saying so.
+
 ## why
 
 most bugs in unfamiliar code come from not seeing what a change will ripple into. warpmap makes

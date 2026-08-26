@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
+	"github.com/dfedoryshchev/warpmap/internal/config"
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
 	"github.com/dfedoryshchev/warpmap/internal/explain"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
@@ -51,22 +52,40 @@ func usage(w io.Writer) {
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
 
+// loadConfig reads the project's warpmap.json. A broken one stops the command
+// rather than being analysed around: the numbers decide what the tool reports,
+// so guessing them is worse than saying so.
+func loadConfig(dir string) config.Config {
+	c, err := config.Load(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", config.FileName, err)
+		os.Exit(2)
+	}
+	return c
+}
+
 func sourceFiles(dir string) []string {
+	cfg := loadConfig(dir)
 	var out []string
 	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
+		// the walk's own path is what gets matched, relative to the project, so
+		// a pattern means the same thing however the caller spelled the dir.
 		if d.IsDir() {
-			switch d.Name() {
-			case "node_modules", ".git", "dist", "build":
+			if r := rel(dir, p); r != "." && cfg.Ignored(r) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if sourceExt[filepath.Ext(p)] {
-			out = append(out, p)
+		if !sourceExt[filepath.Ext(p)] {
+			return nil
 		}
+		if cfg.Ignored(rel(dir, p)) {
+			return nil
+		}
+		out = append(out, p)
 		return nil
 	})
 	return out
@@ -325,6 +344,7 @@ func riskCmd(args []string) int {
 		return 2
 	}
 	dir, changed := rest[0], rest[1:]
+	blastLimit := loadConfig(dir).Thresholds.Blast
 	g := graph.Build(sourceFiles(dir))
 	untested := map[string]bool{}
 	for _, f := range coverage.Untested(g) {
@@ -343,7 +363,7 @@ func riskCmd(args []string) int {
 			tag = "UNTESTED"
 		}
 		fmt.Printf("  %s: blast=%d, %s\n", cf, len(br), tag)
-		if len(br) > 10 && untested[abs] {
+		if len(br) > blastLimit && untested[abs] {
 			risky++
 		}
 	}
