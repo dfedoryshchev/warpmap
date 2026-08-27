@@ -1,0 +1,68 @@
+name: warpmap ratchet
+description: >-
+  compare a pull request against the commit it targets and comment whether the change made the
+  codebase safer or riskier
+
+inputs:
+  directory:
+    description: the directory to analyse, relative to the repository root
+    required: false
+    default: "."
+  base-sha:
+    description: the commit to take the baseline from; defaults to the base of the pull request
+    required: false
+    default: ${{ github.event.pull_request.base.sha }}
+  fail-on-risk:
+    description: >-
+      fail the job when the ratchet reports a regression, or a changed file is high-blast and
+      untested
+    required: false
+    default: "true"
+  comment:
+    description: write the report as a pull request comment
+    required: false
+    default: "true"
+  token:
+    description: token used to write the comment; needs permission to write pull request comments
+    required: false
+    default: ${{ github.token }}
+  pr-number:
+    description: the pull request to comment on
+    required: false
+    default: ${{ github.event.pull_request.number }}
+
+outputs:
+  ratchet:
+    description: ok, or risk-up when the change degraded the codebase against the baseline
+    value: ${{ steps.ratchet.outputs.ratchet }}
+  risk:
+    description: manageable, risky, or skipped when the pull request changes no source file
+    value: ${{ steps.ratchet.outputs.risk }}
+  report:
+    description: the markdown report, the same text that is posted as the comment
+    value: ${{ steps.ratchet.outputs.report }}
+  comment-url:
+    description: the comment that was written, empty when none was
+    value: ${{ steps.ratchet.outputs.comment-url }}
+
+runs:
+  using: composite
+  steps:
+    # built from the action's own checkout rather than downloaded, so the binary that runs is
+    # the one at the ref the workflow pinned. the runner needs a go toolchain for this.
+    - name: build warpmap
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -o "$RUNNER_TEMP/warpmap" .
+    - name: ratchet
+      id: ratchet
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/ci/pr-ratchet.sh"
+      env:
+        WARPMAP_BIN: ${{ runner.temp }}/warpmap
+        INPUT_DIRECTORY: ${{ inputs.directory }}
+        INPUT_BASE_SHA: ${{ inputs.base-sha }}
+        INPUT_FAIL_ON_RISK: ${{ inputs.fail-on-risk }}
+        INPUT_COMMENT: ${{ inputs.comment }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}

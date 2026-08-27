@@ -142,6 +142,84 @@ many dependents, and no test, is what it reports and exits non-zero on. the defa
 a malformed `warpmap.json` stops the command rather than being worked around. the numbers decide
 what the tool reports, so guessing them is worse than saying so.
 
+## on a pull request
+
+the ratchet earns its keep in CI, so warpmap ships as a github action. it snapshots the commit
+your pull request targets, compares the branch against that snapshot, and writes the result to
+the pull request.
+
+```yaml
+name: warpmap
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - uses: dfedoryshchev/warpmap@main
+```
+
+`fetch-depth: 0` is not optional. the action exports the base commit of the pull request to take
+the baseline from, and a shallow checkout does not contain it; without it the action stops and
+says which commit it could not find. it builds warpmap from its own source rather than
+downloading a release, so the runner needs a go toolchain, which is what `setup-go` is for. pin
+`@main` to a commit if you want it to stop moving under you.
+
+the comment carries two blocks. the first is `diff` against that baseline. the second is `risk`
+over the source files the pull request adds or changes, which is where `thresholds.blast` decides
+what counts as risky:
+
+~~~
+### warpmap: risk up
+
+the ratchet, against `de4ccf0`:
+
+```text
+since baseline: edges +0, cycles +0, orphans +0, god-modules +0
+1 files got more complex:
+  +50  src/core.ts
+verdict: RISK UP - this change made the codebase harder to work on safely
+```
+
+the 1 source file(s) this pull request adds or changes:
+
+```text
+  src/core.ts: blast=4, UNTESTED
+combined blast radius: 4 files
+verdict: 1 changed file(s) are high-blast AND untested - add tests before changing
+```
+~~~
+
+pushing again edits that comment rather than adding another one.
+
+| input | default | what it does |
+|---|---|---|
+| `directory` | `.` | the directory to analyse, relative to the repository root |
+| `base-sha` | the pull request's base commit | what the baseline is taken from |
+| `fail-on-risk` | `true` | `false` still reports, and leaves the job green |
+| `comment` | `true` | `false` gates without writing to the pull request |
+| `token` | `github.token` | needs permission to write pull request comments |
+| `pr-number` | the pull request's number | which pull request to comment on |
+
+outputs: `ratchet` (`ok` or `risk-up`), `risk` (`manageable`, `risky`, or `skipped` when the pull
+request changes no source file), `report` (the comment body) and `comment-url`.
+
+two things worth knowing. the action analyses exported copies of the two commits, so it writes
+nothing into your checkout - no stray `.warpmap/` afterwards. and commenting is best-effort: with
+no token, without `curl` and `jq` on the runner, or against an api that refuses the write, it logs
+why, leaves the report in the job log and the job summary, and gates exactly as it would have. a
+build that was going to pass does not fail because a comment did not land.
+
 ## why
 
 most bugs in unfamiliar code come from not seeing what a change will ripple into. warpmap makes
