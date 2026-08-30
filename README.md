@@ -220,6 +220,76 @@ no token, without `curl` and `jq` on the runner, or against an api that refuses 
 why, leaves the report in the job log and the job summary, and gates exactly as it would have. a
 build that was going to pass does not fail because a comment did not land.
 
+## driving it from an agent
+
+`warpmap mcp` puts the audit behind an MCP server, so an agent can ask what a file drags with it
+rather than guess. it is stdio only: one JSON-RPC request per line on stdin, one reply per line
+on stdout, no port and no daemon. it answers each line as it arrives and exits 0 when stdin
+closes, so a client can hold one process open for a whole run or start one per question.
+
+start it in the directory you want analysed. the session below is the whole surface, against the
+same sample project as the audit above:
+
+```
+$ warpmap mcp
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"demo","version":"0.0.0"}}}
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2024-11-05","serverInfo":{"name":"warpmap","version":"0.1.0"}}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list"}
+{"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"}]}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
+{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"1.000  src/store/session.ts\n0.360  src/api/client.ts\n0.096  src/ui/Widget.tsx\n0.072  src/util/format.ts\n0.040  tests/session.test.ts\n0.024  src/util/uuid.ts\n0.008  src/api/index.ts\n0.008  src/store/index.ts\n","type":"text"}]}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"trace","arguments":{"dir":".","file":"src/store/session.ts"}}}
+{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts","type":"text"}]}}
+```
+
+the handshake advertises `tools` and nothing else: there are no resources and no prompts. the
+server answers three methods, `initialize`, `tools/list` and `tools/call`. anything else,
+including a line that is not valid JSON, is skipped with no reply at all, so a client must not
+block waiting for one. a `tools/call` naming a tool it does not have is answered, but as
+ordinary text (`unknown tool: hotspot`) rather than a JSON-RPC error.
+
+both tools return a single text block. `hotspots` is the ranking, score then path, up to ten
+lines - the same order `warpmap hotspots` prints, without the churn and complexity columns:
+
+```
+1.000  src/store/session.ts
+0.360  src/api/client.ts
+0.096  src/ui/Widget.tsx
+0.072  src/util/format.ts
+0.040  tests/session.test.ts
+0.024  src/util/uuid.ts
+0.008  src/api/index.ts
+0.008  src/store/index.ts
+```
+
+`trace` answers how big the blast radius is and only that: it returns the count, not the
+dependents. `warpmap trace` on the command line prints the files themselves, and
+`warpmap brief <dir> <file>` packs the hotspot rank, the blast radius and whether a test
+imports the file into one block, so an agent that can also run a command gets more than the two
+tools carry.
+
+four things worth knowing before wiring it up:
+
+- `dir` is resolved against the working directory the server was started in. an absolute path
+  works too.
+- the path `hotspots` returns is `dir` and the file joined, spelled the way you spelled `dir`.
+  with `dir` set to `.` that is `src/store/session.ts`, which is exactly what `trace` wants as
+  its `file`; with `dir` set to anything else the two stop composing, because `trace` joins
+  `file` onto `dir` again. start the server at the project root and pass `.`. (on windows the
+  separators come back as backslashes.)
+- `warpmap.json` is read from the analysed directory, so a project's `ignore` globs apply to
+  what the server reports.
+- churn comes from `git log`, so a directory with no history ranks every file 0.000, the same
+  caveat as the first audit above.
+
+what an agent does with this is the audit loop one file at a time: `hotspots` to find where the
+risk sits, then `trace` on the file it is about to edit. a high count is the signal to read the
+dependents first, or to insist on a test, rather than to start typing.
+
+the runner i use is [agentweft](https://github.com/dfedoryshchev/agentweft), which starts an MCP
+server as a subprocess and speaks the same line-delimited JSON-RPC. nothing above is specific to
+it: the surface is two tools over stdio, and any MCP client can drive it.
+
 ## why
 
 most bugs in unfamiliar code come from not seeing what a change will ripple into. warpmap makes
