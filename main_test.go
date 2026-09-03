@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/dfedoryshchev/warpmap/internal/config"
@@ -82,6 +83,59 @@ func TestSourceFilesHonoursConfiguredIgnores(t *testing.T) {
 	}
 	if !slices.Contains(got, "src/a.ts") {
 		t.Fatalf("src was swallowed: %v", got)
+	}
+}
+
+// the dashboard is the one command whose output is meant to be opened rather
+// than read in a terminal, so -o has to produce the same document stdout does,
+// and it has to produce one row per source file.
+func TestDashboardWritesTheSamePageToAFileAsToStdout(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range map[string]string{
+		"src/a.ts": "import { b } from \"./b\";\nexport const a = b + 1;\n",
+		"src/b.ts": "export const b = 1;\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out := filepath.Join(dir, "dashboard.html")
+	if code := dashboardCmd([]string{"-o", out, dir}); code != 0 {
+		t.Fatalf("dashboard -o exited %d", code)
+	}
+	page, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("-o wrote nothing: %v", err)
+	}
+
+	got := string(page)
+	if !strings.HasPrefix(got, "<!doctype html>") || !strings.HasSuffix(got, "</html>\n") {
+		t.Fatal("-o did not write a whole document")
+	}
+	for _, want := range []string{"src/a.ts", "src/b.ts", "2 files, 1 import edges, 2 ranked"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the page is missing %q", want)
+		}
+	}
+	if n := strings.Count(got, "<rect class=\"file\""); n != 2 {
+		t.Fatalf("%d boxes on the map, want one per source file (2)", n)
+	}
+	// the page must not depend on where it was written: a second run into a
+	// different file is byte for byte the same document.
+	twin := filepath.Join(t.TempDir(), "twin.html")
+	if code := dashboardCmd([]string{"-o", twin, dir}); code != 0 {
+		t.Fatalf("second dashboard -o exited %d", code)
+	}
+	again, err := os.ReadFile(twin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(again) != got {
+		t.Fatal("two runs over one project wrote different pages")
 	}
 }
 

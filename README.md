@@ -104,6 +104,7 @@ snapshot is a single file, `.warpmap/baseline.json`.
 - `trace <dir> <file>` - blast radius: everything that depends on a file
 - `dead` / `cycles` / `god` - orphans, import cycles, over-central modules
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
+- `dashboard <dir>` - the same ranking as a treemap on one html page
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state
@@ -117,6 +118,35 @@ snapshot is a single file, `.warpmap/baseline.json`.
 - `mcp` - run as an MCP server so an agent can query the risk map live
 
 multi-language: TypeScript / JavaScript / Python today.
+
+## the dashboard
+
+a ranked list tells you the order. it does not tell you how much of the codebase the top of
+that list actually is. `warpmap dashboard` answers that: the same ranking as a treemap, one
+box per source file, nested by directory.
+
+```
+$ warpmap dashboard . > dashboard.html
+```
+
+a box's area is the file's complexity score and its colour is the hotspot score, so the large
+red block is the file that is both hard to read and changing constantly, and the pale slivers
+are the ones you can leave alone. hover a box for its path and the three numbers behind it;
+the table under the map repeats the top ten, so the numbers are readable without a pointer.
+a file with no code in it still gets a one-unit sliver rather than vanishing off the map.
+
+the colour ramp runs on the square root of the score rather than the score itself. the score
+is normalised churn times normalised complexity, which is heavily skewed: on a real repo
+almost every file sits below 0.05, so a linear ramp paints one box red and everything else
+white. the square root spreads that crowded low end without reordering anything.
+
+the page is one file, and there is nothing in it but markup, css and inline svg. the layout
+is computed before the file is written, so there is no javascript, no web font and no request
+of any kind: it renders identically on a machine with no network, and it can be mailed or
+committed next to the code it describes. the same project renders the same bytes twice, so
+two of them diff.
+
+`-o` writes the page to a file instead of stdout, the same way `report` does.
 
 ## configuration (optional)
 

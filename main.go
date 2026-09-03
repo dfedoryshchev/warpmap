@@ -14,6 +14,7 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
 	"github.com/dfedoryshchev/warpmap/internal/config"
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
+	"github.com/dfedoryshchev/warpmap/internal/dashboard"
 	"github.com/dfedoryshchev/warpmap/internal/explain"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/mcp"
@@ -41,6 +42,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
 	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
 	fmt.Fprintln(w, "  report <dir>           full markdown audit (-o file)")
+	fmt.Fprintln(w, "  dashboard <dir>        hotspot treemap as one html page (-o file)")
 	fmt.Fprintln(w, "  baseline <dir>         save a snapshot for later comparison")
 	fmt.Fprintln(w, "  diff <dir>             ratchet: better or worse since the baseline")
 	fmt.Fprintln(w, "  risk <dir> <file>...   blast radius + test gaps for a change")
@@ -483,6 +485,60 @@ func reportCmd(args []string) int {
 	return 0
 }
 
+// dashboardCmd renders the hotspot ranking as one html page. It follows
+// report's convention: stdout unless -o names a file.
+func dashboardCmd(args []string) int {
+	fset := flag.NewFlagSet("dashboard", flag.ExitOnError)
+	out := fset.String("o", "", "write to a file instead of stdout")
+	fset.Parse(args)
+	dir := fset.Arg(0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap dashboard <dir>  (one self-contained html page)")
+		return 2
+	}
+	files := sourceFiles(dir)
+	churn, err := metrics.GitChurn(dir, 6)
+	if err != nil {
+		churn = metrics.Churn{}
+	}
+	g := graph.Build(files)
+	page := dashboard.Page{
+		Project: projectName(dir),
+		Version: version,
+		Files:   len(g.Files),
+		Edges:   len(g.Edges),
+	}
+	for _, h := range metrics.Hotspots(dir, files, churn) {
+		page.Hotspots = append(page.Hotspots, dashboard.Item{
+			Path:       rel(dir, h.File),
+			Churn:      h.Churn,
+			Complexity: h.Complexity,
+			Score:      h.Score,
+		})
+	}
+	doc := dashboard.Render(page)
+	if *out != "" {
+		if err := os.WriteFile(*out, []byte(doc), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		return 0
+	}
+	fmt.Print(doc)
+	return 0
+}
+
+// projectName titles the page with the directory's own name rather than the
+// path the caller typed, so `.` and `../thing` name the same project the same
+// way.
+func projectName(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return filepath.ToSlash(dir)
+	}
+	return filepath.Base(abs)
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		usage(os.Stderr)
@@ -503,6 +559,8 @@ func main() {
 		os.Exit(godCmd(os.Args[2:]))
 	case "report":
 		os.Exit(reportCmd(os.Args[2:]))
+	case "dashboard":
+		os.Exit(dashboardCmd(os.Args[2:]))
 	case "baseline":
 		os.Exit(baselineCmd(os.Args[2:]))
 	case "diff":
