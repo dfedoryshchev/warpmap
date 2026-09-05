@@ -76,7 +76,9 @@ $ warpmap testgap .
 
 that is the whole audit loop: what is risky, what depends on it, what is untested.
 `warpmap report . -o audit.md` writes the same findings to one markdown file you can hand
-to someone else.
+to someone else. flags read the same wherever you put them, so
+`warpmap report -o audit.md .` is that same command; an explicit `--` still ends the flags,
+for a file whose name starts with a dash.
 
 ### then keep it from getting worse
 
@@ -146,7 +148,8 @@ of any kind: it renders identically on a machine with no network, and it can be 
 committed next to the code it describes. the same project renders the same bytes twice, so
 two of them diff.
 
-`-o` writes the page to a file instead of stdout, the same way `report` does.
+`warpmap dashboard . -o dashboard.html` writes the page to a file instead of stdout, the same
+way `report` does.
 
 ## configuration (optional)
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -137,6 +138,186 @@ func TestDashboardWritesTheSamePageToAFileAsToStdout(t *testing.T) {
 	if string(again) != got {
 		t.Fatal("two runs over one project wrote different pages")
 	}
+}
+
+// the directory comes first in every example the readme and `warpmap help`
+// print, which is the order the flag package cannot read: it stops at the first
+// non-flag argument, so everything after the directory was swallowed into
+// fset.Args() and the command silently ran with its defaults and exited 0. the
+// five tests below are one per flag-taking shape - a count flag, a format flag,
+// a value flag on a two-positional command, and the two commands that write a
+// file.
+
+func TestHotspotsReadsTheCountFlagAfterTheDirectory(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return hotspotsCmd([]string{dir, "-n", "1"}) })
+	if code != 0 {
+		t.Fatalf("hotspots exited %d", code)
+	}
+	if n := countLines(out); n != 1 {
+		t.Fatalf("hotspots <dir> -n 1 printed %d rows, want 1:\n%s", n, out)
+	}
+}
+
+func TestAnalyzeReadsTheFormatFlagAfterTheDirectory(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return analyzeCmd([]string{dir, "--json"}) })
+	if code != 0 {
+		t.Fatalf("analyze exited %d", code)
+	}
+	if !strings.HasPrefix(out, "{") {
+		t.Fatalf("analyze <dir> --json printed the plain summary, not json:\n%s", out)
+	}
+	dot, code := captureStdout(t, func() int { return analyzeCmd([]string{dir, "--dot"}) })
+	if code != 0 {
+		t.Fatalf("analyze exited %d", code)
+	}
+	if !strings.HasPrefix(dot, "digraph") {
+		t.Fatalf("analyze <dir> --dot printed the plain summary, not dot:\n%s", dot)
+	}
+}
+
+func TestTraceReadsTheDepthFlagAfterTheDirectory(t *testing.T) {
+	dir := chainProject(t)
+	// a.ts -> b.ts -> c.ts, so one hop out of c.ts reaches b.ts and only b.ts.
+	out, code := captureStdout(t, func() int {
+		return traceCmd([]string{dir, "src/c.ts", "--depth", "1"})
+	})
+	if code != 0 {
+		t.Fatalf("trace exited %d", code)
+	}
+	if !strings.HasPrefix(out, "1 files depend on") {
+		t.Fatalf("trace <dir> <file> --depth 1 did not stop at one hop:\n%s", out)
+	}
+}
+
+func TestReportReadsTheOutputFlagAfterTheDirectory(t *testing.T) {
+	dir := chainProject(t)
+	dest := filepath.Join(t.TempDir(), "audit.md")
+	out, code := captureStdout(t, func() int { return reportCmd([]string{dir, "-o", dest}) })
+	if code != 0 {
+		t.Fatalf("report exited %d", code)
+	}
+	if out != "" {
+		t.Fatalf("report <dir> -o <file> printed the audit to stdout instead of writing it:\n%s", out)
+	}
+	md, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("report <dir> -o <file> wrote no file: %v", err)
+	}
+	if !strings.HasPrefix(string(md), "#") {
+		t.Fatalf("the file is not the markdown audit:\n%s", md)
+	}
+}
+
+func TestDashboardReadsTheOutputFlagAfterTheDirectory(t *testing.T) {
+	dir := chainProject(t)
+	dest := filepath.Join(t.TempDir(), "dashboard.html")
+	out, code := captureStdout(t, func() int { return dashboardCmd([]string{dir, "-o", dest}) })
+	if code != 0 {
+		t.Fatalf("dashboard exited %d", code)
+	}
+	if out != "" {
+		t.Fatalf("dashboard <dir> -o <file> printed the page to stdout instead of writing it:\n%s", out)
+	}
+	page, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("dashboard <dir> -o <file> wrote no file: %v", err)
+	}
+	if !strings.HasPrefix(string(page), "<!doctype html>") {
+		t.Fatalf("the file is not the dashboard page:\n%s", page)
+	}
+}
+
+// the order that already worked has to keep working: accepting flags anywhere is
+// only allowed to add spellings, never to move one.
+func TestFlagsBeforeTheDirectoryStillWork(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return hotspotsCmd([]string{"-n", "2", dir}) })
+	if code != 0 {
+		t.Fatalf("hotspots exited %d", code)
+	}
+	if n := countLines(out); n != 2 {
+		t.Fatalf("hotspots -n 2 <dir> printed %d rows, want 2:\n%s", n, out)
+	}
+	depth, code := captureStdout(t, func() int {
+		return traceCmd([]string{"--depth", "1", dir, "src/c.ts"})
+	})
+	if code != 0 {
+		t.Fatalf("trace exited %d", code)
+	}
+	if !strings.HasPrefix(depth, "1 files depend on") {
+		t.Fatalf("trace --depth 1 <dir> <file> lost its depth limit:\n%s", depth)
+	}
+}
+
+// pulling positionals out of the middle must not cost the one escape hatch a
+// caller has: after an explicit `--` nothing is a flag, however it is spelled.
+func TestDoubleDashStillEndsTheFlags(t *testing.T) {
+	dir := chainProject(t)
+	odd := "src/-n.ts"
+	if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(odd)), []byte("export const n = 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := captureStdout(t, func() int { return traceCmd([]string{"--", dir, odd}) })
+	if code != 0 {
+		t.Fatalf("trace exited %d", code)
+	}
+	if !strings.HasPrefix(out, "0 files depend on "+odd) {
+		t.Fatalf("a file named like a flag was not traced as a file:\n%s", out)
+	}
+}
+
+// chainProject writes a three-file import chain: a.ts -> b.ts -> c.ts. it gives
+// hotspots more than one row to cap and trace more than one hop to stop at.
+func chainProject(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range map[string]string{
+		"src/a.ts": "import { b } from \"./b\";\nexport const a = b + 1;\n",
+		"src/b.ts": "import { c } from \"./c\";\nexport const b = c + 1;\n",
+		"src/c.ts": "export const c = 1;\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// captureStdout runs fn with os.Stdout pointed at a pipe and returns everything
+// it printed. the commands print with fmt.Printf, so reading the descriptor back
+// is the only way to assert on what the caller actually sees.
+func captureStdout(t *testing.T, fn func() int) (string, int) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := os.Stdout
+	os.Stdout = w
+	read := make(chan string, 1)
+	go func() {
+		var b strings.Builder
+		io.Copy(&b, r)
+		read <- b.String()
+	}()
+	code := fn()
+	os.Stdout = saved
+	w.Close()
+	out := <-read
+	r.Close()
+	return out, code
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	return len(strings.Split(strings.TrimSuffix(s, "\n"), "\n"))
 }
 
 func names(dir string, files []string) []string {

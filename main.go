@@ -50,9 +50,58 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  explain <dir>          narrate the top hotspot (LLM, offline fallback)")
 	fmt.Fprintln(w, "  mcp                    run as an MCP server over stdio")
 	fmt.Fprintln(w, "  help, version          this list, or the version")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "flags may be written before or after <dir>, so `warpmap report . -o audit.md`")
+	fmt.Fprintln(w, "and `warpmap report -o audit.md .` are the same command.")
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
+
+// parseArgs parses args with fset and returns the positional arguments in the
+// order they were written, wherever the flags sit among them.
+//
+// flag.Parse stops at the first non-flag argument, and every command here is
+// spelled `<command> <dir> ...`, so a flag written after the directory - which
+// is the order the readme and `warpmap help` document - was swallowed into
+// fset.Args() and never looked at. the command then ran with its defaults and
+// exited 0: `report <dir> -o audit.md` printed the audit to stdout and wrote no
+// file, `analyze <dir> --json` printed the one-line summary, and `-n` capped
+// nothing. an answer that looks like the one that was asked for, but is not, is
+// the failure this tool exists to prevent.
+//
+// each pass lifts the first positional off the front and re-parses what follows,
+// which leaves the flag package itself to decide which flags take a value. an
+// explicit `--` still ends the flags: everything after it is held back and
+// returned verbatim, so a file named like a flag stays a file.
+func parseArgs(fset *flag.FlagSet, args []string) []string {
+	var tail []string
+	for i, a := range args {
+		if a == "--" {
+			args, tail = args[:i], args[i+1:]
+			break
+		}
+	}
+	var positional []string
+	for len(args) > 0 {
+		fset.Parse(args)
+		rest := fset.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest[0])
+		args = rest[1:]
+	}
+	return append(positional, tail...)
+}
+
+// arg reads one positional by index, or "" when it was not given - fset.Arg's
+// contract, over the slice parseArgs returns.
+func arg(positional []string, i int) string {
+	if i >= len(positional) {
+		return ""
+	}
+	return positional[i]
+}
 
 // loadConfig reads the project's warpmap.json. A broken one stops the command
 // rather than being analysed around: the numbers decide what the tool reports,
@@ -110,8 +159,7 @@ func rel(dir, f string) string {
 func hotspotsCmd(args []string) int {
 	fset := flag.NewFlagSet("hotspots", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap hotspots <dir>")
 		return 2
@@ -136,8 +184,7 @@ func analyzeCmd(args []string) int {
 	fset := flag.NewFlagSet("analyze", flag.ExitOnError)
 	asJSON := fset.Bool("json", false, "print the full graph as json")
 	asDot := fset.Bool("dot", false, "print the graph as graphviz dot")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap analyze <dir>")
 		return 2
@@ -159,9 +206,9 @@ func analyzeCmd(args []string) int {
 func traceCmd(args []string) int {
 	fset := flag.NewFlagSet("trace", flag.ExitOnError)
 	depth := fset.Int("depth", 0, "limit how many import hops to walk (0 = all)")
-	fset.Parse(args)
-	dir := fset.Arg(0)
-	file := fset.Arg(1)
+	positional := parseArgs(fset, args)
+	dir := arg(positional, 0)
+	file := arg(positional, 1)
 	if dir == "" || file == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap trace <dir> <file>")
 		return 2
@@ -178,8 +225,7 @@ func traceCmd(args []string) int {
 
 func deadCmd(args []string) int {
 	fset := flag.NewFlagSet("dead", flag.ExitOnError)
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap dead <dir>")
 		return 2
@@ -194,8 +240,7 @@ func deadCmd(args []string) int {
 
 func cyclesCmd(args []string) int {
 	fset := flag.NewFlagSet("cycles", flag.ExitOnError)
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap cycles <dir>")
 		return 2
@@ -215,8 +260,7 @@ func cyclesCmd(args []string) int {
 func godCmd(args []string) int {
 	fset := flag.NewFlagSet("god", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap god <dir>")
 		return 2
@@ -236,8 +280,7 @@ func godCmd(args []string) int {
 func testgapCmd(args []string) int {
 	fset := flag.NewFlagSet("testgap", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap testgap <dir>")
 		return 2
@@ -265,8 +308,7 @@ func testgapCmd(args []string) int {
 
 func briefCmd(args []string) int {
 	fset := flag.NewFlagSet("brief", flag.ExitOnError)
-	fset.Parse(args)
-	rest := fset.Args()
+	rest := parseArgs(fset, args)
 	if len(rest) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: warpmap brief <dir> <file>  (a context pack to hand an agent)")
 		return 2
@@ -311,8 +353,7 @@ func briefCmd(args []string) int {
 func explainCmd(args []string) int {
 	fset := flag.NewFlagSet("explain", flag.ExitOnError)
 	top := fset.Int("n", 1, "how many hotspots to explain")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap explain <dir>  (set ANTHROPIC_API_KEY + WARPMAP_MODEL, or runs offline)")
 		return 2
@@ -339,8 +380,7 @@ func explainCmd(args []string) int {
 
 func riskCmd(args []string) int {
 	fset := flag.NewFlagSet("risk", flag.ExitOnError)
-	fset.Parse(args)
-	rest := fset.Args()
+	rest := parseArgs(fset, args)
 	if len(rest) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: warpmap risk <dir> <file>...  (the files you are about to change)")
 		return 2
@@ -381,8 +421,7 @@ func riskCmd(args []string) int {
 func ownershipCmd(args []string) int {
 	fset := flag.NewFlagSet("ownership", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many hotspots to check")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap ownership <dir>")
 		return 2
@@ -411,8 +450,7 @@ func ownershipCmd(args []string) int {
 
 func diffCmd(args []string) int {
 	fset := flag.NewFlagSet("diff", flag.ExitOnError)
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap diff <dir>  (compares against .warpmap/baseline.json)")
 		return 2
@@ -443,8 +481,7 @@ func diffCmd(args []string) int {
 
 func baselineCmd(args []string) int {
 	fset := flag.NewFlagSet("baseline", flag.ExitOnError)
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap baseline <dir>")
 		return 2
@@ -462,8 +499,7 @@ func baselineCmd(args []string) int {
 func reportCmd(args []string) int {
 	fset := flag.NewFlagSet("report", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap report <dir>")
 		return 2
@@ -490,8 +526,7 @@ func reportCmd(args []string) int {
 func dashboardCmd(args []string) int {
 	fset := flag.NewFlagSet("dashboard", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
-	fset.Parse(args)
-	dir := fset.Arg(0)
+	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap dashboard <dir>  (one self-contained html page)")
 		return 2
