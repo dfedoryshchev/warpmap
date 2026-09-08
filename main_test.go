@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/dfedoryshchev/warpmap/internal/config"
+	"github.com/dfedoryshchev/warpmap/internal/graph"
 )
 
 // every command prints the same file the same way. half of them used to print
@@ -137,6 +139,67 @@ func TestDashboardWritesTheSamePageToAFileAsToStdout(t *testing.T) {
 	}
 	if string(again) != got {
 		t.Fatal("two runs over one project wrote different pages")
+	}
+}
+
+// analyze is the one command whose output is written for another program to
+// read, and it was the one handing out the path the walk produced rather than
+// the path every other command prints. named absolutely - which is how a script
+// and the ci action both name a project - the graph came back keyed by the
+// analysing machine's own absolute, backslashed paths.
+func TestAnalyzeDotNamesFilesLikeEveryOtherCommand(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return analyzeCmd([]string{dir, "--dot"}) })
+	if code != 0 {
+		t.Fatalf("analyze exited %d", code)
+	}
+	want := "digraph deps {\n  rankdir=LR;\n" +
+		"  \"src/a.ts\" -> \"src/b.ts\";\n" +
+		"  \"src/b.ts\" -> \"src/c.ts\";\n" +
+		"}\n"
+	if out != want {
+		t.Fatalf("analyze --dot printed\n%swant\n%s", out, want)
+	}
+}
+
+func TestAnalyzeJSONNamesFilesLikeEveryOtherCommand(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return analyzeCmd([]string{dir, "--json"}) })
+	if code != 0 {
+		t.Fatalf("analyze exited %d", code)
+	}
+	var g graph.Graph
+	if err := json.Unmarshal([]byte(out), &g); err != nil {
+		t.Fatalf("analyze --json printed something that is not json: %v\n%s", err, out)
+	}
+	wantFiles := []string{"src/a.ts", "src/b.ts", "src/c.ts"}
+	if !slices.Equal(g.Files, wantFiles) {
+		t.Fatalf("files = %v, want %v", g.Files, wantFiles)
+	}
+	wantEdges := []graph.Edge{{From: "src/a.ts", To: "src/b.ts"}, {From: "src/b.ts", To: "src/c.ts"}}
+	if !slices.Equal(g.Edges, wantEdges) {
+		t.Fatalf("edges = %v, want %v", g.Edges, wantEdges)
+	}
+	// the whole point of the spelling: the graph lines up with what the walk -
+	// and so every other command - calls the same files.
+	walked := names(dir, sourceFiles(dir))
+	joined := append([]string(nil), g.Files...)
+	sort.Strings(joined)
+	if !slices.Equal(joined, walked) {
+		t.Fatalf("the graph names files %v, every other command names them %v", joined, walked)
+	}
+}
+
+// respelling the paths is all it does. a project with no source files still
+// encodes the way it always has, so a consumer that already handles the empty
+// graph keeps working.
+func TestAnalyzeJSONKeepsTheEmptyGraphShape(t *testing.T) {
+	out, code := captureStdout(t, func() int { return analyzeCmd([]string{t.TempDir(), "--json"}) })
+	if code != 0 {
+		t.Fatalf("analyze exited %d", code)
+	}
+	if want := "{\n  \"Files\": null,\n  \"Edges\": null\n}\n"; out != want {
+		t.Fatalf("the empty graph changed shape:\n%swant\n%s", out, want)
 	}
 }
 

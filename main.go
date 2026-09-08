@@ -180,6 +180,38 @@ func hotspotsCmd(args []string) int {
 	return 0
 }
 
+// relGraph re-spells every path in g the way `rel` spells one: relative to the
+// analysed directory, forward slashes.
+//
+// The graph itself is keyed by the walk's own paths, and it has to be - those
+// are the names that get opened, resolved against each other and matched, so
+// nothing but the printing may be respelled. `analyze` is where that leaked.
+// Its two machine-readable forms encoded the graph as built, so they were the
+// only output naming a file differently from every other command: `src/a.ts`
+// from hotspots, `..\proj\src\a.ts` or a full absolute path from here. Nothing
+// downstream could join the two, and naming the project absolutely - which is
+// how a script and the ci action name one - put the analysing machine's own
+// directory layout into a file meant to be handed to somebody else.
+//
+// A nil slice stays nil, so an empty project still encodes the shape it always
+// did and a consumer that already handles it keeps working.
+func relGraph(dir string, g graph.Graph) graph.Graph {
+	var out graph.Graph
+	if g.Files != nil {
+		out.Files = make([]string, 0, len(g.Files))
+		for _, f := range g.Files {
+			out.Files = append(out.Files, rel(dir, f))
+		}
+	}
+	if g.Edges != nil {
+		out.Edges = make([]graph.Edge, 0, len(g.Edges))
+		for _, e := range g.Edges {
+			out.Edges = append(out.Edges, graph.Edge{From: rel(dir, e.From), To: rel(dir, e.To)})
+		}
+	}
+	return out
+}
+
 func analyzeCmd(args []string) int {
 	fset := flag.NewFlagSet("analyze", flag.ExitOnError)
 	asJSON := fset.Bool("json", false, "print the full graph as json")
@@ -194,9 +226,9 @@ func analyzeCmd(args []string) int {
 	case *asJSON:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(g)
+		enc.Encode(relGraph(dir, g))
 	case *asDot:
-		fmt.Print(graph.ToDot(g))
+		fmt.Print(graph.ToDot(relGraph(dir, g)))
 	default:
 		fmt.Printf("%d files, %d import edges\n", len(g.Files), len(g.Edges))
 	}
