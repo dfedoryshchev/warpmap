@@ -102,6 +102,14 @@ const (
 	pad = 2.0
 )
 
+// Framed reports whether the box keeps a header strip of its own with room
+// left under it for its children. An unframed box hands the whole of itself to
+// its children, strip included, so nothing drawn there belongs to the directory
+// alone. The root is the canvas itself and is never framed.
+func (n *Node) Framed() bool {
+	return n.Path != "" && n.Rect.W-2*pad > 0 && n.Rect.H-headerH-pad > 0
+}
+
 // Layout assigns every node a rectangle inside a w by h canvas.
 func Layout(root *Node, w, h float64) {
 	root.Rect = Rect{0, 0, w, h}
@@ -113,15 +121,12 @@ func place(n *Node) {
 		return
 	}
 	inner := n.Rect
-	if n.Path != "" { // the root is the canvas itself and has no label of its own
+	if n.Framed() {
 		inner = Rect{
 			X: n.Rect.X + pad,
 			Y: n.Rect.Y + headerH,
 			W: n.Rect.W - 2*pad,
 			H: n.Rect.H - headerH - pad,
-		}
-		if inner.W <= 0 || inner.H <= 0 {
-			inner = n.Rect // no room for a frame; the children take the whole box
 		}
 	}
 	squarify(n.Children, inner)

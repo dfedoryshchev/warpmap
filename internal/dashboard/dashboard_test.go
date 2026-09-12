@@ -3,6 +3,8 @@ package dashboard
 import (
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -127,6 +129,116 @@ func overlap(a, b Rect) float64 {
 		return 0
 	}
 	return w * h
+}
+
+// deepProject is a feature-sliced tree six directories deep, the shape a
+// front-end grows into and the one a treemap is asked to make legible. The
+// complexities are the areas: they decide the boxes, so they are fixed.
+var deepProject = []Item{
+	{Path: "src/app/providers/router/routes/private/Guard.tsx", Complexity: 35},
+	{Path: "src/app/providers/router/routes/private/Routes.tsx", Complexity: 200},
+	{Path: "src/app/providers/router/routes/public/Routes.tsx", Complexity: 21},
+	{Path: "src/app/providers/store/slices/session/slice.ts", Complexity: 8},
+	{Path: "src/app/providers/store/slices/session/selectors.ts", Complexity: 88},
+	{Path: "src/app/providers/store/slices/session/thunks.ts", Complexity: 155},
+	{Path: "src/app/providers/store/slices/catalog/slice.ts", Complexity: 53},
+	{Path: "src/app/providers/store/slices/catalog/selectors.ts", Complexity: 91},
+	{Path: "src/features/checkout/components/forms/fields/AddressField.tsx", Complexity: 211},
+	{Path: "src/features/checkout/components/forms/fields/CardNumberField.tsx", Complexity: 11},
+	{Path: "src/features/checkout/components/forms/fields/ExpiryField.tsx", Complexity: 176},
+	{Path: "src/features/checkout/components/forms/validation/rules.ts", Complexity: 10},
+	{Path: "src/features/checkout/components/forms/validation/messages.ts", Complexity: 51},
+	{Path: "src/features/checkout/model/types.ts", Complexity: 29},
+	{Path: "src/features/checkout/model/reducer.ts", Complexity: 174},
+	{Path: "src/features/catalog/components/grid/cells/PriceCell.tsx", Complexity: 194},
+	{Path: "src/features/catalog/components/grid/cells/TitleCell.tsx", Complexity: 30},
+	{Path: "src/features/catalog/model/types.ts", Complexity: 109},
+	{Path: "src/entities/user/api/client.ts", Complexity: 9},
+	{Path: "src/entities/user/ui/Avatar.tsx", Complexity: 213},
+	{Path: "src/shared/lib/format/currency/format.ts", Complexity: 217},
+	{Path: "src/shared/lib/format/date/format.ts", Complexity: 125},
+	{Path: "src/shared/ui/button/Button.tsx", Complexity: 61},
+	{Path: "tests/e2e/checkout/flow.spec.ts", Complexity: 181},
+	{Path: "index.ts", Complexity: 219},
+}
+
+type drawnLabel struct {
+	text string
+	ink  Rect
+}
+
+var labelRe = regexp.MustCompile(
+	`<text class="(?:dlabel|flabel)" x="([-0-9.]+)" y="([-0-9.]+)"[^>]*>([^<]*)</text>`)
+
+// drawnLabels reads the labels back off the finished page, because that is the
+// only place their final coordinates exist. The font is 10px monospace, so one
+// rune is charW wide and the ink of a single line sits between the ascender and
+// the descender of the baseline the label is anchored to.
+func drawnLabels(t *testing.T, page string) []drawnLabel {
+	t.Helper()
+	const ascent, descent = 7.5, 2.5
+	var out []drawnLabel
+	for _, m := range labelRe.FindAllStringSubmatch(page, -1) {
+		x, err := strconv.ParseFloat(m[1], 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		y, err := strconv.ParseFloat(m[2], 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, drawnLabel{
+			text: m[3],
+			ink:  Rect{X: x, Y: y - ascent, W: charW * float64(len([]rune(m[3]))), H: ascent + descent},
+		})
+	}
+	return out
+}
+
+// a label drawn on top of another label is the one failure that makes the map
+// less readable than the table under it, and deep nesting is where it happens:
+// a directory box can be tall enough to draw its own name and still too short
+// to keep a strip to draw it in.
+func TestDeepNestingDrawsNoLabelOnTopOfAnother(t *testing.T) {
+	page := Render(Page{Project: "p", Files: len(deepProject), Hotspots: deepProject})
+	labels := drawnLabels(t, page)
+	if len(labels) < 30 {
+		t.Fatalf("only %d labels on the page; the fixture is not exercising the map", len(labels))
+	}
+	for i := range labels {
+		for j := i + 1; j < len(labels); j++ {
+			a, b := labels[i], labels[j]
+			if area := overlap(a.ink, b.ink); area > 0.01 {
+				t.Fatalf("%q %+v and %q %+v are drawn over each other (%.2f square units of ink)",
+					a.text, a.ink, b.text, b.ink, area)
+			}
+		}
+	}
+}
+
+// the map may drop a label it has no room for, but it may never drop a box: the
+// fix for an unreadable label must not take a file off the map.
+func TestDeepNestingStillGivesEveryFileABox(t *testing.T) {
+	root := Tree(deepProject)
+	Layout(root, canvasW, canvasH)
+	seen := 0
+	var walk func(n *Node)
+	walk = func(n *Node) {
+		if n.Leaf() {
+			seen++
+			if n.Rect.W <= 0 || n.Rect.H <= 0 {
+				t.Fatalf("%s got no box: %+v", n.Path, n.Rect)
+			}
+			return
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(root)
+	if seen != len(deepProject) {
+		t.Fatalf("laid out %d files, want %d", seen, len(deepProject))
+	}
 }
 
 func TestHeatRunsColdToHotAndNeverReordersTwoFiles(t *testing.T) {

@@ -109,7 +109,7 @@ func draw(b *strings.Builder, n *Node) {
 		fmt.Fprintf(b, "<g><rect class=\"dir\" x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"%.1f\"/>",
 			n.Rect.X, n.Rect.Y, n.Rect.W, n.Rect.H)
 		fmt.Fprintf(b, "<title>%s</title>", esc(n.Path))
-		if label := fit(n.Name, n.Rect.W); label != "" && n.Rect.H >= headerH {
+		if label := fit(n.Name, n.Rect.W); label != "" && n.Framed() {
 			fmt.Fprintf(b, "<text class=\"dlabel\" x=\"%.1f\" y=\"%.1f\">%s</text>",
 				n.Rect.X+4, n.Rect.Y+11, esc(label))
 		}
