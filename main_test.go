@@ -254,6 +254,21 @@ func TestTraceReadsTheDepthFlagAfterTheDirectory(t *testing.T) {
 	}
 }
 
+func TestBriefListsDependentsInAStableOrderAndSaysSo(t *testing.T) {
+	dir := chainProject(t)
+	// a.ts -> b.ts -> c.ts, so both of the others depend on c.ts.
+	want := "2 of the 2 dependents, alphabetically:\n  - src/a.ts\n  - src/b.ts\n"
+	for i := 0; i < 20; i++ {
+		out, code := captureStdout(t, func() int { return briefCmd([]string{dir, "src/c.ts"}) })
+		if code != 0 {
+			t.Fatalf("brief exited %d", code)
+		}
+		if !strings.Contains(out, want) {
+			t.Fatalf("run %d printed\n%swant it to contain\n%s", i, out, want)
+		}
+	}
+}
+
 func TestReportReadsTheOutputFlagAfterTheDirectory(t *testing.T) {
 	dir := chainProject(t)
 	dest := filepath.Join(t.TempDir(), "audit.md")

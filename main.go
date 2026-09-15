@@ -374,8 +374,13 @@ func briefCmd(args []string) int {
 	fmt.Printf("- authors who have touched it: %d%s\n", len(owners), map[bool]string{true: " (bus factor 1)", false: ""}[len(owners) == 1])
 	fmt.Printf("- has a test importing it: %v\n", !untested[abs])
 	if len(blast) > 0 {
-		fmt.Println("\nread the heaviest dependents before you change it:")
-		for _, b := range blast[:min(8, len(blast))] {
+		// sorted here rather than in trace.BlastRadius: `trace` prints the whole
+		// set and its order is its own question, but a capped list that reshuffles
+		// shows a different eight every run.
+		sort.Strings(blast)
+		shown := blast[:min(8, len(blast))]
+		fmt.Printf("\n%d of the %d dependents, alphabetically:\n", len(shown), len(blast))
+		for _, b := range shown {
 			fmt.Printf("  - %s\n", rel(dir, b))
 		}
 	}
