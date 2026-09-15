@@ -42,22 +42,11 @@ func extractTs(src string) []string {
 }
 
 func resolveTs(fromFile, spec string) string {
-	if !strings.HasPrefix(spec, ".") {
-		return ""
+	if strings.HasPrefix(spec, ".") {
+		return resolveOnDisk(filepath.Join(filepath.Dir(fromFile), spec))
 	}
-	base := filepath.Join(filepath.Dir(fromFile), spec)
-	if hasExt(base, tsExts) && exists(base) {
-		return base
-	}
-	for _, ext := range tsExts {
-		if exists(base + ext) {
-			return base + ext
-		}
-	}
-	for _, idx := range tsIndex {
-		if cand := filepath.Join(base, idx); exists(cand) {
-			return cand
-		}
+	if tc := findTsconfig(filepath.Dir(fromFile)); tc != nil {
+		return resolveAlias(tc, spec)
 	}
 	return ""
 }
