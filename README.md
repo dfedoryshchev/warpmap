@@ -98,6 +98,9 @@ verdict: RISK UP - this change made the codebase harder to work on safely
 `diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the
 snapshot is a single file, `.warpmap/baseline.json`.
 
+the same loop run end to end against a real 95-file project, with the numbers it returned and
+what they did and did not mean, is in [examples/worked-audit.md](examples/worked-audit.md).
+
 ## what it does
 
 **understand**
