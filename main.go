@@ -41,7 +41,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  god <dir>              files with high fan-in/out")
 	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
 	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
-	fmt.Fprintln(w, "  report <dir>           full markdown audit (-o file)")
+	fmt.Fprintln(w, "  report <dir>           full audit, markdown or --json (-o file)")
 	fmt.Fprintln(w, "  dashboard <dir>        hotspot treemap as one html page (-o file)")
 	fmt.Fprintln(w, "  baseline <dir>         save a snapshot for later comparison")
 	fmt.Fprintln(w, "  diff <dir>             ratchet: better or worse since the baseline")
@@ -536,6 +536,7 @@ func baselineCmd(args []string) int {
 func reportCmd(args []string) int {
 	fset := flag.NewFlagSet("report", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
+	asJSON := fset.Bool("json", false, "render the audit as json for the evidence pack")
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap report <dir>")
@@ -546,14 +547,23 @@ func reportCmd(args []string) int {
 	if err != nil {
 		churn = metrics.Churn{}
 	}
-	md := report.Build(dir, files, churn).Markdown()
+	r := report.Build(dir, files, churn)
+	doc := r.Markdown()
+	if *asJSON {
+		pack, err := r.JSON()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		doc = string(pack)
+	}
 	if *out != "" {
-		if err := os.WriteFile(*out, []byte(md), 0o644); err != nil {
+		if err := os.WriteFile(*out, []byte(doc), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
 	} else {
-		fmt.Print(md)
+		fmt.Print(doc)
 	}
 	return 0
 }

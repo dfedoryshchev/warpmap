@@ -307,6 +307,62 @@ func TestDashboardReadsTheOutputFlagAfterTheDirectory(t *testing.T) {
 	}
 }
 
+// the audit's machine-readable half has to reach the same two places its
+// markdown does, because the evidence pack is written next to the document it
+// backs.
+func TestReportWritesTheJSONVariant(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return reportCmd([]string{dir, "--json"}) })
+	if code != 0 {
+		t.Fatalf("report --json exited %d", code)
+	}
+	var pack struct {
+		Files    int `json:"files"`
+		Edges    int `json:"edges"`
+		Hotspots []struct {
+			File string `json:"file"`
+		} `json:"hotspots"`
+	}
+	if err := json.Unmarshal([]byte(out), &pack); err != nil {
+		t.Fatalf("report --json printed something that is not json: %v\n%s", err, out)
+	}
+	if pack.Files != 3 || pack.Edges != 2 {
+		t.Fatalf("the pack describes a different project: %d files, %d edges", pack.Files, pack.Edges)
+	}
+	got := make([]string, 0, len(pack.Hotspots))
+	for _, h := range pack.Hotspots {
+		got = append(got, h.File)
+	}
+	sort.Strings(got)
+	if want := names(dir, sourceFiles(dir)); !slices.Equal(got, want) {
+		t.Fatalf("the pack ranks %v, the walk found %v", got, want)
+	}
+
+	md, code := captureStdout(t, func() int { return reportCmd([]string{dir}) })
+	if code != 0 {
+		t.Fatalf("report exited %d", code)
+	}
+	if !strings.HasPrefix(md, "# warpmap audit") {
+		t.Fatalf("the default audit is no longer markdown:\n%s", md)
+	}
+
+	dest := filepath.Join(t.TempDir(), "audit.json")
+	written, code := captureStdout(t, func() int { return reportCmd([]string{dir, "--json", "-o", dest}) })
+	if code != 0 {
+		t.Fatalf("report --json -o exited %d", code)
+	}
+	if written != "" {
+		t.Fatalf("report --json -o <file> printed the pack to stdout as well:\n%s", written)
+	}
+	b, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("report --json -o <file> wrote no file: %v", err)
+	}
+	if string(b) != out {
+		t.Fatalf("-o wrote a different pack than stdout printed:\n%s\n%s", b, out)
+	}
+}
+
 // the order that already worked has to keep working: accepting flags anywhere is
 // only allowed to add spellings, never to move one.
 func TestFlagsBeforeTheDirectoryStillWork(t *testing.T) {

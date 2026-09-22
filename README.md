@@ -80,6 +80,32 @@ to someone else. flags read the same wherever you put them, so
 `warpmap report -o audit.md .` is that same command; an explicit `--` still ends the flags,
 for a file whose name starts with a dash.
 
+`warpmap report . --json` prints that same audit as json instead - the same counts, the same
+findings, the same ranking - for a reader that is a program. `-o` writes it to a file the way
+it does for markdown.
+
+```
+$ warpmap report . --json | head -12
+{
+  "files": 8,
+  "edges": 7,
+  "findings": [
+    {
+      "severity": "low",
+      "kind": "dead-code",
+      "detail": "1 files nothing imports",
+      "recommendation": "confirm they are entry points, or delete them"
+    }
+  ],
+  "hotspots": [
+```
+
+each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
+markdown table prints. files are named relative to the project you pointed at, exactly as
+every other command names them, so the document and the json agree file for file and neither
+carries a path off the machine that ran the audit. `findings` and `hotspots` are always
+lists, empty ones included, so nothing has to special-case a project with nothing to report.
+
 ### then keep it from getting worse
 
 snapshot the state you inherited, change something, and ask whether it got better or worse:

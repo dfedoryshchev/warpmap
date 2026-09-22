@@ -16,10 +16,10 @@ const (
 )
 
 type Finding struct {
-	Severity       Severity
-	Kind           string
-	Detail         string
-	Recommendation string
+	Severity       Severity `json:"severity"`
+	Kind           string   `json:"kind"`
+	Detail         string   `json:"detail"`
+	Recommendation string   `json:"recommendation"`
 }
 
 func relPath(dir, f string) string {
