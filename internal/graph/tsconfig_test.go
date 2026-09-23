@@ -29,6 +29,59 @@ func TestResolveTsAliasThroughTsconfigPaths(t *testing.T) {
 	}
 }
 
+func TestResolveTsJsSpecifierFindsTsSource(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "src", "helpers.ts"), "export const h = 1;\n")
+	writeFile(t, filepath.Join(dir, "src", "view.tsx"), "export const v = 1;\n")
+	from := filepath.Join(dir, "src", "main.ts")
+	writeFile(t, from, `import { h } from "./helpers.js";`+"\n"+`import { v } from "./view.jsx";`+"\n")
+
+	for spec, want := range map[string]string{
+		"./helpers.js": filepath.Join(dir, "src", "helpers.ts"),
+		"./view.jsx":   filepath.Join(dir, "src", "view.tsx"),
+		"./view.js":    filepath.Join(dir, "src", "view.tsx"),
+	} {
+		if got := resolveTs(from, spec); got != want {
+			t.Errorf("resolveTs(%q, %q) = %q, want %q", from, spec, got, want)
+		}
+	}
+}
+
+func TestResolveTsJsSpecifierPrefersTsSourceOverCompiledJs(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "src", "helpers.js"), "export const h = 1;\n")
+	writeFile(t, filepath.Join(dir, "src", "helpers.ts"), "export const h = 1;\n")
+	from := filepath.Join(dir, "src", "main.ts")
+	writeFile(t, from, `import { h } from "./helpers.js";`+"\n")
+
+	want := filepath.Join(dir, "src", "helpers.ts")
+	if got := resolveTs(from, "./helpers.js"); got != want {
+		t.Fatalf("resolveTs(%q, %q) = %q, want %q", from, "./helpers.js", got, want)
+	}
+}
+
+func TestResolveTsJsSpecifierInPlainJsProject(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "src", "helpers.js"), "export const h = 1;\n")
+	from := filepath.Join(dir, "src", "main.js")
+	writeFile(t, from, `import { h } from "./helpers.js";`+"\n")
+
+	want := filepath.Join(dir, "src", "helpers.js")
+	if got := resolveTs(from, "./helpers.js"); got != want {
+		t.Fatalf("resolveTs(%q, %q) = %q, want %q", from, "./helpers.js", got, want)
+	}
+}
+
+func TestResolveTsJsSpecifierWithNoSourceReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	from := filepath.Join(dir, "src", "main.ts")
+	writeFile(t, from, `import { h } from "./helpers.js";`+"\n")
+
+	if got := resolveTs(from, "./helpers.js"); got != "" {
+		t.Fatalf("resolveTs on a .js specifier with no source = %q, want empty", got)
+	}
+}
+
 func TestResolveTsAliasMissingTargetReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "tsconfig.json"), `{"compilerOptions":{"baseUrl":".","paths":{"@/*":["src/*"]}}}`)

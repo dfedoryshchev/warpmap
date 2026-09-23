@@ -166,6 +166,16 @@ func splitPattern(pattern string) (prefix, suffix string, hasStar bool) {
 // resolveOnDisk applies the same file/extension/index rules resolveTs uses
 // for a relative specifier, over an already-joined absolute base path.
 func resolveOnDisk(base string) string {
+	// NodeNext and ESM TypeScript name the emitted .js file, and tsc resolves it to the
+	// .ts source first, so a compiled .js beside its source must not win.
+	if e := filepath.Ext(base); e == ".js" || e == ".jsx" {
+		stem := strings.TrimSuffix(base, e)
+		for _, ext := range []string{".ts", ".tsx"} {
+			if exists(stem + ext) {
+				return stem + ext
+			}
+		}
+	}
 	if hasExt(base, tsExts) && exists(base) {
 		return base
 	}
