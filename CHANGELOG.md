@@ -2,6 +2,51 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+- `warpmap.json` in the analysed directory: `ignore` globs that add to the built-in skip list,
+  and `thresholds.blast` for where `risk` starts calling a change risky. A malformed file stops
+  the command instead of being guessed around
+- A GitHub Action that baselines the pull request's base commit, runs `diff` and `risk` against
+  the branch, and writes the result as one pull request comment that later pushes edit
+- `dashboard`: the hotspot ranking as a treemap on one self-contained html page (`-o` to write
+  it to a file)
+- `report --json`: the same audit as json, for a reader that is a program
+- tsconfig `baseUrl` / `paths` aliases resolve in the import graph (`extends` chains are not
+  followed)
+- README: an install section and a first-audit walkthrough, the configuration file, the GitHub
+  Action, and driving warpmap from an agent over MCP
+- `examples/worked-audit.md`: the audit loop run end to end against a real project
+
+### Changed
+- `brief` lists the dependents it shows in alphabetical order, and its label says how many of
+  the total it shows
+
+### Fixed
+- `hotspots`, `trace`, `dead`, `cycles` and `god` printed files as walked (`..\proj\src\a.ts` on
+  windows) while `testgap` printed them relative to the project; they now name a file relative
+  to the project, with forward slashes
+- `analyze --json` and `--dot` encoded the walked path, including an absolute one; they now use
+  the same project-relative names
+- A flag written after the directory was silently ignored and the command ran with its
+  defaults. Flags are now read wherever they are written, so `report . -o audit.md` and
+  `report -o audit.md .` are the same command; an explicit `--` still ends the flags
+- `dashboard` drew a directory label on top of its children when the tree nested deeply
+- A `.js` or `.jsx` specifier naming a TypeScript source (the NodeNext / ESM style) resolved to
+  nothing; it now resolves to the `.ts` or `.tsx` file, ahead of any compiled `.js` beside it
+
+### Deprecated
+- `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to
+  narrate, and it is the one command that talks to a server
+
+### Known limitations
+- Imports are still extracted with regular expressions rather than a parser
+- Package specifiers are skipped, as are aliases that come only through a tsconfig `extends`
+  chain
+- Python resolves relative imports only (`from .mod import x`)
+- TypeScript / JavaScript / Python only
+
 ## 0.1.0 - 2026-08-02
 
 ### Added

@@ -25,7 +25,7 @@ import (
 
 // version is the single source of truth for the release string: the CLI prints it and
 // the MCP server reports it in the initialize handshake.
-const version = "0.1.0"
+const version = "0.2.0-dev"
 
 // usage writes the command list to w - stdout when the user asked for help, stderr when
 // warpmap is correcting them.

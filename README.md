@@ -18,7 +18,7 @@ one static binary, nothing to configure. check it landed:
 
 ```
 $ warpmap version
-warpmap 0.1.0
+warpmap 0.2.0-dev
 ```
 
 `warpmap help` lists every command.
@@ -145,7 +145,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 
 **work with agents**
 - `brief <dir> <file>` - a context pack to hand an agent before it touches a file
-- `explain <dir>` - narrate the top hotspot in plain language (LLM; runs offline without a key)
+- `explain <dir>` - deprecated, removed in 0.3.0; `brief` and `mcp` give an agent the same
+  facts to narrate
 - `mcp` - run as an MCP server so an agent can query the risk map live
 
 multi-language: TypeScript / JavaScript / Python today.
@@ -295,7 +296,7 @@ same sample project as the audit above:
 ```
 $ warpmap mcp
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"demo","version":"0.0.0"}}}
-{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2024-11-05","serverInfo":{"name":"warpmap","version":"0.1.0"}}}
+{"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2024-11-05","serverInfo":{"name":"warpmap","version":"0.2.0-dev"}}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
 {"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"}]}}
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
