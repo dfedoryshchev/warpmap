@@ -16,7 +16,7 @@ All notable changes to this project are documented in this file.
 - tsconfig `baseUrl` / `paths` aliases resolve in the import graph (`extends` chains are not
   followed)
 - README: an install section and a first-audit walkthrough, the configuration file, the GitHub
-  Action, and driving warpmap from an agent over MCP
+  Action, driving warpmap from an agent over MCP, and what talks to the network
 - `examples/worked-audit.md`: the audit loop run end to end against a real project
 
 ### Changed

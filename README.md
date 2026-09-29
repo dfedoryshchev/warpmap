@@ -354,6 +354,34 @@ the runner i use is [agentweft](https://github.com/dfedoryshchev/agentweft), whi
 server as a subprocess and speaks the same line-delimited JSON-RPC. nothing above is specific to
 it: the surface is two tools over stdio, and any MCP client can drive it.
 
+## what talks to the network
+
+one command, so start with it. the binary links `net/http` and carries an api endpoint as a
+literal string, because `explain` can narrate a hotspot through a hosted model. it sends a
+request only when both `ANTHROPIC_API_KEY` and `WARPMAP_MODEL` are set; with either one empty it
+prints a fixed offline summary and makes no request. a request is one prompt per narrated
+hotspot, naming the file's path and three integers - churn, complexity and blast radius - plus
+the model name, with the key as a header. no file contents go into it. `explain` is
+deprecated and goes in 0.3.0.
+
+everything else stays on the machine. no package under `internal/` except `internal/explain`
+links a network stack, directly or transitively, and a test holds that line:
+`linkage_test.go` lists each package's dependencies with `go list` and fails on any `net` or
+`net/...`, and fails again if more than one package is allowed the exception. history comes
+from `git log`, run as a local subprocess against the directory you pointed at.
+
+two limits worth knowing. the test is about what warpmap links, not what a subprocess does:
+warpmap starts `git log` and nothing else, and what your git does from there is outside it. and
+the github action is a separate script, `ci/pr-ratchet.sh`, that runs on your runner: it calls
+the github api with `curl` to write the pull request comment, and runs `git fetch` for the base
+commit when the checkout does not already have it.
+
+the receipt is one test:
+
+```
+$ go test -run TestAnalysisPackagesLinkNoNetworkStack .
+```
+
 ## why
 
 most bugs in unfamiliar code come from not seeing what a change will ripple into. warpmap makes
