@@ -193,7 +193,8 @@ project that has none behaves exactly as it did before the file was supported.
 }
 ```
 
-`ignore` adds to the directories always skipped (`node_modules`, `.git`, `dist`, `build`); it
+`ignore` adds to the directories always skipped (`node_modules`, `.git`, `dist`, `build`,
+`.venv`, `venv`, `__pycache__`, `.tox`, `.next`, `.nx`, `.turbo`); it
 does not replace them, so listing your own does not bring `.git` back. a pattern with no slash
 matches a directory of that name at any depth, the way the built-ins do; a pattern with a slash
 is anchored where you wrote it, so `src/generated` skips that one and leaves `lib/generated`

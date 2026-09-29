@@ -89,6 +89,33 @@ func TestSourceFilesHonoursConfiguredIgnores(t *testing.T) {
 	}
 }
 
+func TestSourceFilesSkipsVirtualEnvironmentsByDefault(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"app/main.py": "import os\n",
+		".venv/lib/python3.12/site-packages/x.py": "x = 1\n",
+		"venv/lib/python3.12/site-packages/y.py":  "y = 1\n",
+		"web/.next/static/chunks/main.js":         "var a=1;\n",
+		".turbo/cache/out.js":                     "var b=1;\n",
+		"web/src/index.ts":                        "export const c=1;\n",
+	}
+	for name, src := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := names(dir, sourceFiles(dir))
+	slices.Sort(got)
+	want := []string{"app/main.py", "web/src/index.ts"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("walked %v, want only the project's own sources %v", got, want)
+	}
+}
+
 // the dashboard is the one command whose output is meant to be opened rather
 // than read in a terminal, so -o has to produce the same document stdout does,
 // and it has to produce one row per source file.

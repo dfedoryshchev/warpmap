@@ -23,6 +23,18 @@ func TestMissingFileIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestDefaultsSkipEnvironmentsAndBuildCaches(t *testing.T) {
+	c := Defaults()
+	for _, p := range []string{
+		".venv", "venv", "services/api/.venv", "pkg/__pycache__", ".tox",
+		".next", "apps/web/.next", ".nx", ".turbo",
+	} {
+		if !c.Ignored(p) {
+			t.Fatalf("default config does not ignore %q", p)
+		}
+	}
+}
+
 // a file that sets one section must not zero the other. this is the bug the
 // unmarshal-onto-defaults exists to prevent: `{"ignore":["vendor"]}` read into
 // a blank struct gives blast=0, and blast=0 makes every single file risky.

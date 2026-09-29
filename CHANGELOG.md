@@ -35,6 +35,9 @@ All notable changes to this project are documented in this file.
 - `dashboard` drew a directory label on top of its children when the tree nested deeply
 - A `.js` or `.jsx` specifier naming a TypeScript source (the NodeNext / ESM style) resolved to
   nothing; it now resolves to the `.ts` or `.tsx` file, ahead of any compiled `.js` beside it
+- The walk read Python virtual environments and build caches as project source, so installed
+  packages turned up in `dead` and one large bundle could flatten the whole `hotspots` ranking.
+  `.venv`, `venv`, `__pycache__`, `.tox`, `.next`, `.nx` and `.turbo` are now skipped by default
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

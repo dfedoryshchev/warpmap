@@ -2,9 +2,8 @@
 // the two things every command used to hardcode: which directories to skip on
 // the walk, and where "too risky" starts.
 //
-// It is optional on purpose. A project with no warpmap.json gets exactly the
-// behaviour it got before this file existed - Defaults() is the old hardcoded
-// list and the old hardcoded number, not a new set of opinions.
+// It is optional on purpose. A project with no warpmap.json gets Defaults():
+// the built-in skip list and the old hardcoded blast number.
 package config
 
 import (
@@ -34,9 +33,14 @@ type Thresholds struct {
 // FileName is the name looked for in the analysed directory.
 const FileName = "warpmap.json"
 
-// builtinIgnore is what the walk skipped before warpmap.json existed. It stays
-// in force even when a project supplies its own list - see Ignored.
-var builtinIgnore = []string{"node_modules", ".git", "dist", "build"}
+// builtinIgnore is what the walk always skips: installed dependencies, virtual
+// environments and build caches, none of which is the project's own source. It
+// stays in force even when a project supplies its own list - see Ignored.
+var builtinIgnore = []string{
+	"node_modules", ".git", "dist", "build",
+	".venv", "venv", "__pycache__", ".tox",
+	".next", ".nx", ".turbo",
+}
 
 // Defaults is the configuration of a project that has no warpmap.json.
 func Defaults() Config {
