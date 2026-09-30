@@ -38,6 +38,10 @@ All notable changes to this project are documented in this file.
 - The walk read Python virtual environments and build caches as project source, so installed
   packages turned up in `dead` and one large bundle could flatten the whole `hotspots` ranking.
   `.venv`, `venv`, `__pycache__`, `.tox`, `.next`, `.nx` and `.turbo` are now skipped by default
+- `testgap`, `risk` and `brief` matched the test directories (`tests/`, `__tests__/`, `e2e/`)
+  against the walked path, so a top-level `tests/` went unseen when the project was named `.`,
+  and every file counted as a test when the project itself sat under a directory of that name.
+  They now match the path relative to the project
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

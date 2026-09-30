@@ -429,6 +429,33 @@ func TestDoubleDashStillEndsTheFlags(t *testing.T) {
 	}
 }
 
+// the walk spells a top-level file with no leading separator when the project
+// is named `.`, and as `<dir>/...` otherwise, so both spellings have to agree.
+func TestTestgapCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
+	dir := chainProject(t)
+	if err := os.MkdirAll(filepath.Join(dir, "tests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setup := "import { a } from \"../src/a\";\nexport const s = a;\n"
+	if err := os.WriteFile(filepath.Join(dir, "tests", "setup.ts"), []byte(setup), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	named, code := captureStdout(t, func() int { return testgapCmd([]string{dir}) })
+	if code != 0 {
+		t.Fatalf("testgap exited %d", code)
+	}
+	t.Chdir(dir)
+	dot, code := captureStdout(t, func() int { return testgapCmd([]string{"."}) })
+	if code != 0 {
+		t.Fatalf("testgap . exited %d", code)
+	}
+	want := "2 untested files; the riskiest (highest blast radius) first - test these before you change them:\n" +
+		"  blast=3    src/c.ts\n  blast=2    src/b.ts\n"
+	if named != want || dot != want {
+		t.Fatalf("testgap <dir> printed\n%stestgap . printed\n%swant\n%s", named, dot, want)
+	}
+}
+
 // chainProject writes a three-file import chain: a.ts -> b.ts -> c.ts. it gives
 // hotspots more than one row to cap and trace more than one hop to stop at.
 func chainProject(t *testing.T) string {

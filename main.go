@@ -323,7 +323,7 @@ func testgapCmd(args []string) int {
 		blast int
 	}
 	var rows []row
-	for _, f := range coverage.Untested(g) {
+	for _, f := range coverage.Untested(dir, g) {
 		rows = append(rows, row{f, len(trace.BlastRadius(g, f, 0))})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].blast > rows[j].blast })
@@ -362,7 +362,7 @@ func briefCmd(args []string) int {
 		}
 	}
 	untested := map[string]bool{}
-	for _, f := range coverage.Untested(g) {
+	for _, f := range coverage.Untested(dir, g) {
 		untested[f] = true
 	}
 	blast := trace.BlastRadius(g, abs, 0)
@@ -426,7 +426,7 @@ func riskCmd(args []string) int {
 	blastLimit := loadConfig(dir).Thresholds.Blast
 	g := graph.Build(sourceFiles(dir))
 	untested := map[string]bool{}
-	for _, f := range coverage.Untested(g) {
+	for _, f := range coverage.Untested(dir, g) {
 		untested[f] = true
 	}
 	blast := map[string]bool{}
