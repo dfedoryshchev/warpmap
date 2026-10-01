@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -453,6 +455,55 @@ func TestTestgapCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
 		"  blast=3    src/c.ts\n  blast=2    src/b.ts\n"
 	if named != want || dot != want {
 		t.Fatalf("testgap <dir> printed\n%stestgap . printed\n%swant\n%s", named, dot, want)
+	}
+}
+
+// git reads the path it is given from inside the project, so a project named
+// relative to where the caller stands used to match no history at all and
+// every file printed `authors=0`.
+func TestOwnershipCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
+	dir := chainProject(t)
+	git := func(args ...string) {
+		t.Helper()
+		full := append([]string{"-C", dir, "-c", "commit.gpgsign=false", "-c", "user.name=Ada", "-c", "user.email=a@example.com"}, args...)
+		if out, err := exec.Command("git", full...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init")
+	// git writes its objects read-only, which the temp-dir cleanup cannot remove on windows.
+	t.Cleanup(func() {
+		filepath.WalkDir(filepath.Join(dir, ".git"), func(p string, d fs.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				os.Chmod(p, 0o666)
+			}
+			return nil
+		})
+	})
+	git("add", "--", "src")
+	git("commit", "-m", "add the chain")
+
+	run := func(project string) []string {
+		t.Helper()
+		out, code := captureStdout(t, func() int { return ownershipCmd([]string{project}) })
+		if code != 0 {
+			t.Fatalf("ownership %s exited %d", project, code)
+		}
+		lines := strings.Split(strings.TrimSpace(out), "\n")[1:]
+		sort.Strings(lines)
+		return lines
+	}
+	want := []string{
+		"  authors=1  src/a.ts  <- bus factor 1",
+		"  authors=1  src/b.ts  <- bus factor 1",
+		"  authors=1  src/c.ts  <- bus factor 1",
+	}
+	if got := run(dir); !slices.Equal(got, want) {
+		t.Fatalf("ownership <absolute> printed %q, want %q", got, want)
+	}
+	t.Chdir(filepath.Dir(dir))
+	if got := run(filepath.Base(dir)); !slices.Equal(got, want) {
+		t.Fatalf("ownership <relative> printed %q, want %q", got, want)
 	}
 }
 

@@ -42,6 +42,9 @@ All notable changes to this project are documented in this file.
   against the walked path, so a top-level `tests/` went unseen when the project was named `.`,
   and every file counted as a test when the project itself sat under a directory of that name.
   They now match the path relative to the project
+- `ownership` and `brief` reported `authors=0` for every file when the project was named by a
+  relative path, which reads as no owner at all; they now ask git about the path relative to the
+  project, so the count matches the absolute spelling
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to
