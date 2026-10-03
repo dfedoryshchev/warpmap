@@ -75,6 +75,14 @@ func Serve(version string, sources func(string) []string) {
 	}
 }
 
+func projectPath(dir, f string) string {
+	r, err := filepath.Rel(dir, f)
+	if err != nil {
+		return filepath.ToSlash(f)
+	}
+	return filepath.ToSlash(r)
+}
+
 func handleCall(req request, sources func(string) []string) {
 	var p struct {
 		Name string `json:"name"`
@@ -97,7 +105,7 @@ func handleCall(req request, sources func(string) []string) {
 			if i >= 10 {
 				break
 			}
-			text += fmt.Sprintf("%.3f  %s\n", h.Score, h.File)
+			text += fmt.Sprintf("%s  %.3f\n", projectPath(p.Args.Dir, h.File), h.Score)
 		}
 	case "trace":
 		g := graph.Build(sources(p.Args.Dir))

@@ -50,6 +50,12 @@ All notable changes to this project are documented in this file.
   against. Test files (the ones `testgap` treats as tests) are now left out of the ranking, and
   so out of `ownership`, `brief`, `dashboard`, `report` and the MCP `hotspots` tool, which read
   the same ranking
+- The MCP `hotspots` tool printed each line score first, so a client that reads the first field
+  as the file and the last as the score skipped every line and got an empty ranking with no
+  error. Each line is now the path, two spaces, then the score. The path was also the walked one,
+  absolute when `dir` was, with backslashes on windows; it is now relative to `dir` with forward
+  slashes, which is the `file` that `trace` takes with the same `dir`. The command line
+  `hotspots` table is unchanged
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

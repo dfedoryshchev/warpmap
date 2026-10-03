@@ -302,7 +302,7 @@ $ warpmap mcp
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
 {"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"}]}}
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
-{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"1.000  src/store/session.ts\n0.360  src/api/client.ts\n0.096  src/ui/Widget.tsx\n0.072  src/util/format.ts\n0.024  src/util/uuid.ts\n0.008  src/api/index.ts\n0.008  src/store/index.ts\n","type":"text"}]}}
+{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"src/store/session.ts  1.000\nsrc/api/client.ts  0.360\nsrc/ui/Widget.tsx  0.096\nsrc/util/format.ts  0.072\nsrc/util/uuid.ts  0.024\nsrc/api/index.ts  0.008\nsrc/store/index.ts  0.008\n","type":"text"}]}}
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"trace","arguments":{"dir":".","file":"src/store/session.ts"}}}
 {"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts","type":"text"}]}}
 ```
@@ -313,17 +313,19 @@ including a line that is not valid JSON, is skipped with no reply at all, so a c
 block waiting for one. a `tools/call` naming a tool it does not have is answered, but as
 ordinary text (`unknown tool: hotspot`) rather than a JSON-RPC error.
 
-both tools return a single text block. `hotspots` is the ranking, score then path, up to ten
-lines - the same order `warpmap hotspots` prints, without the churn and complexity columns:
+both tools return a single text block. `hotspots` is the ranking, up to ten lines in the same
+order `warpmap hotspots` prints, without the churn and complexity columns. each line is the path
+first, then two spaces, then the score, so a client can take the first field as the file and the
+last as the number:
 
 ```
-1.000  src/store/session.ts
-0.360  src/api/client.ts
-0.096  src/ui/Widget.tsx
-0.072  src/util/format.ts
-0.024  src/util/uuid.ts
-0.008  src/api/index.ts
-0.008  src/store/index.ts
+src/store/session.ts  1.000
+src/api/client.ts  0.360
+src/ui/Widget.tsx  0.096
+src/util/format.ts  0.072
+src/util/uuid.ts  0.024
+src/api/index.ts  0.008
+src/store/index.ts  0.008
 ```
 
 `trace` answers how big the blast radius is and only that: it returns the count, not the
@@ -336,11 +338,9 @@ four things worth knowing before wiring it up:
 
 - `dir` is resolved against the working directory the server was started in. an absolute path
   works too.
-- the path `hotspots` returns is `dir` and the file joined, spelled the way you spelled `dir`.
-  with `dir` set to `.` that is `src/store/session.ts`, which is exactly what `trace` wants as
-  its `file`; with `dir` set to anything else the two stop composing, because `trace` joins
-  `file` onto `dir` again. start the server at the project root and pass `.`. (on windows the
-  separators come back as backslashes.)
+- the path `hotspots` returns is relative to `dir`, with forward slashes on every platform,
+  however `dir` was spelled. that is exactly what `trace` wants as its `file` with the same
+  `dir`, so the two compose.
 - `warpmap.json` is read from the analysed directory, so a project's `ignore` globs apply to
   what the server reports.
 - churn comes from `git log`, so a directory with no history ranks every file 0.000, the same
