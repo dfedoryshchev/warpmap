@@ -3,6 +3,8 @@ package metrics
 import (
 	"path/filepath"
 	"sort"
+
+	"github.com/dfedoryshchev/warpmap/internal/coverage"
 )
 
 type Hotspot struct {
@@ -17,11 +19,17 @@ type Hotspot struct {
 // repo-relative with forward slashes (as git reports), so each is relativized and
 // slash-normalized before the lookup - on Windows filepath.Rel yields backslashes,
 // which never matched git's keys and silently zeroed every churn count.
+//
+// Test files are dropped before the normalisation, not after: a suite churns with
+// the code it covers and is often longer, so it would set the scale for the rest.
 func Hotspots(repoDir string, files []string, churn Churn) []Hotspot {
 	rows := make([]Hotspot, 0, len(files))
 	maxChurn, maxCx := 1, 1
 	for _, f := range files {
 		rel, _ := filepath.Rel(repoDir, f)
+		if coverage.IsTest(rel) {
+			continue
+		}
 		rel = filepath.ToSlash(rel)
 		c := churn[rel]
 		cx, _ := FileComplexity(f)

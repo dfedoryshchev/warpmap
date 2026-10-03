@@ -45,6 +45,11 @@ All notable changes to this project are documented in this file.
 - `ownership` and `brief` reported `authors=0` for every file when the project was named by a
   relative path, which reads as no owner at all; they now ask git about the path relative to the
   project, so the count matches the absolute spelling
+- `hotspots` ranked test files alongside the code, so on a well-tested project the top of the
+  list was the test suite, and one long test file set the scale every other score was read
+  against. Test files (the ones `testgap` treats as tests) are now left out of the ranking, and
+  so out of `ownership`, `brief`, `dashboard`, `report` and the MCP `hotspots` tool, which read
+  the same ranking
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

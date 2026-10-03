@@ -232,6 +232,37 @@ func TestAnalyzeJSONKeepsTheEmptyGraphShape(t *testing.T) {
 	}
 }
 
+func TestHotspotsRanksTheCodeNotItsTests(t *testing.T) {
+	dir := chainProject(t)
+	for name, src := range map[string]string{
+		"src/a.test.ts":      "import { a } from \"./a\";\nif (a) { if (a) { if (a) {} } }\n",
+		"tests/b.ts":         "import { b } from \"../src/b\";\nif (b) { if (b) { if (b) {} } }\n",
+		"src/x/a.spec.tsx":   "import { a } from \"../a\";\nif (a) { if (a) { if (a) {} } }\n",
+		"src/__tests__/c.js": "if (1) { if (1) { if (1) {} } }\n",
+	} {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, code := captureStdout(t, func() int { return hotspotsCmd([]string{dir}) })
+	if code != 0 {
+		t.Fatalf("hotspots exited %d", code)
+	}
+	var got []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(line)
+		got = append(got, fields[len(fields)-1])
+	}
+	sort.Strings(got)
+	if want := []string{"src/a.ts", "src/b.ts", "src/c.ts"}; !slices.Equal(got, want) {
+		t.Fatalf("hotspots ranked %q, want only the shipped files %q", got, want)
+	}
+}
+
 // the directory comes first in every example the readme and `warpmap help`
 // print, which is the order the flag package cannot read: it stops at the first
 // non-flag argument, so everything after the directory was swallowed into

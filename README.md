@@ -52,7 +52,8 @@ $ warpmap hotspots .
 churn is how many commits touched the file in the last 6 months. cx is a structural proxy -
 non-blank lines plus branch keywords - not cyclomatic complexity. the score is normalised
 against the worst churn and the worst complexity in this run, so it ranks files within one
-repo and means nothing between two.
+repo and means nothing between two. test files are left out of the ranking (the same test-file
+rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests.
 
 before you touch the top file, find out what it drags with it:
 
@@ -301,7 +302,7 @@ $ warpmap mcp
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
 {"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"}]}}
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
-{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"1.000  src/store/session.ts\n0.360  src/api/client.ts\n0.096  src/ui/Widget.tsx\n0.072  src/util/format.ts\n0.040  tests/session.test.ts\n0.024  src/util/uuid.ts\n0.008  src/api/index.ts\n0.008  src/store/index.ts\n","type":"text"}]}}
+{"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"1.000  src/store/session.ts\n0.360  src/api/client.ts\n0.096  src/ui/Widget.tsx\n0.072  src/util/format.ts\n0.024  src/util/uuid.ts\n0.008  src/api/index.ts\n0.008  src/store/index.ts\n","type":"text"}]}}
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"trace","arguments":{"dir":".","file":"src/store/session.ts"}}}
 {"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts","type":"text"}]}}
 ```
@@ -320,7 +321,6 @@ lines - the same order `warpmap hotspots` prints, without the churn and complexi
 0.360  src/api/client.ts
 0.096  src/ui/Widget.tsx
 0.072  src/util/format.ts
-0.040  tests/session.test.ts
 0.024  src/util/uuid.ts
 0.008  src/api/index.ts
 0.008  src/store/index.ts
