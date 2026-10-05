@@ -23,23 +23,37 @@ type Hotspot struct {
 // Test files are dropped before the normalisation, not after: a suite churns with
 // the code it covers and is often longer, so it would set the scale for the rest.
 func Hotspots(repoDir string, files []string, churn Churn) []Hotspot {
+	return rank(repoDir, shipped(repoDir, files), churn, func(f string) int {
+		cx, _ := FileComplexity(f)
+		return cx.Score
+	})
+}
+
+func shipped(repoDir string, files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		rel, _ := filepath.Rel(repoDir, f)
+		if !coverage.IsTest(rel) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func rank(repoDir string, files []string, churn Churn, complexity func(string) int) []Hotspot {
 	rows := make([]Hotspot, 0, len(files))
 	maxChurn, maxCx := 1, 1
 	for _, f := range files {
 		rel, _ := filepath.Rel(repoDir, f)
-		if coverage.IsTest(rel) {
-			continue
-		}
-		rel = filepath.ToSlash(rel)
-		c := churn[rel]
-		cx, _ := FileComplexity(f)
+		c := churn[filepath.ToSlash(rel)]
+		cx := complexity(f)
 		if c > maxChurn {
 			maxChurn = c
 		}
-		if cx.Score > maxCx {
-			maxCx = cx.Score
+		if cx > maxCx {
+			maxCx = cx
 		}
-		rows = append(rows, Hotspot{File: f, Churn: c, Complexity: cx.Score})
+		rows = append(rows, Hotspot{File: f, Churn: c, Complexity: cx})
 	}
 	for i := range rows {
 		rows[i].Score = (float64(rows[i].Churn) / float64(maxChurn)) *

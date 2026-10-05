@@ -13,6 +13,7 @@ func IsTest(rel string) bool {
 	base := strings.ToLower(filepath.Base(rel))
 	lf := "/" + strings.ToLower(filepath.ToSlash(rel))
 	return strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") ||
+		strings.HasSuffix(base, "_test.go") ||
 		strings.Contains(lf, "/__tests__/") || strings.Contains(lf, "/tests/") ||
 		strings.Contains(lf, "/e2e/")
 }

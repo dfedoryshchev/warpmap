@@ -563,12 +563,23 @@ func chainProject(t *testing.T) string {
 // is the only way to assert on what the caller actually sees.
 func captureStdout(t *testing.T, fn func() int) (string, int) {
 	t.Helper()
+	return capture(t, &os.Stdout, fn)
+}
+
+func captureStderr(t *testing.T, fn func() int) string {
+	t.Helper()
+	out, _ := capture(t, &os.Stderr, fn)
+	return out
+}
+
+func capture(t *testing.T, stream **os.File, fn func() int) (string, int) {
+	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved := os.Stdout
-	os.Stdout = w
+	saved := *stream
+	*stream = w
 	read := make(chan string, 1)
 	go func() {
 		var b strings.Builder
@@ -576,7 +587,7 @@ func captureStdout(t *testing.T, fn func() int) (string, int) {
 		read <- b.String()
 	}()
 	code := fn()
-	os.Stdout = saved
+	*stream = saved
 	w.Close()
 	out := <-read
 	r.Close()

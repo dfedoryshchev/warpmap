@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -56,6 +57,16 @@ func usage(w io.Writer) {
 }
 
 var sourceExt = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true}
+
+// rankedExt is what hotspots and ownership rank: churn and complexity need no
+// parser. The graph commands keep sourceExt, because a file they cannot parse
+// reads as one with no imports and every such file would turn up in `dead`.
+var rankedExt = map[string]bool{
+	".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".py": true,
+	".go": true, ".cs": true, ".java": true, ".rb": true, ".rs": true, ".php": true,
+	".swift": true, ".kt": true, ".kts": true, ".scala": true,
+	".c": true, ".h": true, ".cpp": true, ".cc": true, ".cxx": true, ".hpp": true,
+}
 
 // parseArgs parses args with fset and returns the positional arguments in the
 // order they were written, wherever the flags sit among them.
@@ -115,7 +126,11 @@ func loadConfig(dir string) config.Config {
 	return c
 }
 
-func sourceFiles(dir string) []string {
+func sourceFiles(dir string) []string { return walk(dir, sourceExt) }
+
+func rankedFiles(dir string) []string { return walk(dir, rankedExt) }
+
+func walk(dir string, exts map[string]bool) []string {
 	cfg := loadConfig(dir)
 	var out []string
 	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -130,7 +145,7 @@ func sourceFiles(dir string) []string {
 			}
 			return nil
 		}
-		if !sourceExt[filepath.Ext(p)] {
+		if !exts[filepath.Ext(p)] {
 			return nil
 		}
 		if cfg.Ignored(rel(dir, p)) {
@@ -164,20 +179,38 @@ func hotspotsCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap hotspots <dir>")
 		return 2
 	}
-	files := sourceFiles(dir)
 	churn, err := metrics.GitChurn(dir, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
-	ranked := metrics.Hotspots(dir, files, churn)
+	ranked, column := rankHotspots(dir, rankedFiles(dir), churn)
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
 	}
 	for _, h := range ranked[:limit] {
-		fmt.Printf("%.3f  churn=%-3d cx=%-4d %s\n", h.Score, h.Churn, h.Complexity, rel(dir, h.File))
+		fmt.Printf("%.3f  churn=%-3d %s=%-4d %s\n", h.Score, h.Churn, column, h.Complexity, rel(dir, h.File))
 	}
 	return 0
+}
+
+// rankHotspots takes complexity from lizard when it is on PATH and from the
+// internal measure otherwise. The two are different numbers, so stderr names the
+// one that ran and the column it is printed under: cx or ccn.
+func rankHotspots(dir string, files []string, churn metrics.Churn) ([]metrics.Hotspot, string) {
+	const internal = "complexity: internal (cx = non-blank lines + 3 x branch keywords)"
+	bin, err := exec.LookPath("lizard")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, internal+"; lizard on PATH gives cyclomatic complexity instead")
+		return metrics.Hotspots(dir, files, churn), "cx"
+	}
+	ranked, err := metrics.LizardHotspots(bin, dir, files, churn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s; lizard is on PATH but failed: %v\n", internal, err)
+		return metrics.Hotspots(dir, files, churn), "cx"
+	}
+	fmt.Fprintln(os.Stderr, "complexity: lizard (ccn = cyclomatic complexity, summed over each file's functions)")
+	return ranked, "ccn"
 }
 
 // relGraph re-spells every path in g the way `rel` spells one: relative to the
@@ -463,12 +496,11 @@ func ownershipCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap ownership <dir>")
 		return 2
 	}
-	files := sourceFiles(dir)
 	churn, err := metrics.GitChurn(dir, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
-	ranked := metrics.Hotspots(dir, files, churn)
+	ranked, _ := rankHotspots(dir, rankedFiles(dir), churn)
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)

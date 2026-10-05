@@ -9,12 +9,12 @@ import (
 )
 
 func TestIsTestSeesATopLevelTestDirectory(t *testing.T) {
-	for _, f := range []string{"tests/setup.ts", "__tests__/a.ts", "e2e/login.ts", "src/tests/a.ts"} {
+	for _, f := range []string{"tests/setup.ts", "__tests__/a.ts", "e2e/login.ts", "src/tests/a.ts", "pkg/walk_test.go"} {
 		if !IsTest(filepath.FromSlash(f)) {
 			t.Errorf("IsTest(%q) = false, want true", f)
 		}
 	}
-	for _, f := range []string{"src/a.ts", "contests/a.ts", "src/latests.ts"} {
+	for _, f := range []string{"src/a.ts", "contests/a.ts", "src/latests.ts", "pkg/contest.go"} {
 		if IsTest(filepath.FromSlash(f)) {
 			t.Errorf("IsTest(%q) = true, want false", f)
 		}

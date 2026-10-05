@@ -14,7 +14,11 @@ go install github.com/dfedoryshchev/warpmap@latest
 ```
 
 or from a clone, `go build -o warpmap .`. pure Go standard library - no runtime dependencies,
-one static binary, nothing to configure. check it landed:
+one static binary, nothing to configure. one optional external tool widens what it measures:
+with [lizard](https://github.com/terryyin/lizard) on your `PATH` (`pip install lizard`; warpmap
+reads its `--csv` output as of lizard 1.24.0), `hotspots` and `ownership` take cyclomatic
+complexity from it, in every language they rank. without it the internal measure runs, and
+nothing else changes. check it landed:
 
 ```
 $ warpmap version
@@ -43,6 +47,7 @@ changing AND are hard to read:
 
 ```
 $ warpmap hotspots .
+complexity: internal (cx = non-blank lines + 3 x branch keywords); lizard on PATH gives cyclomatic complexity instead
 1.000  churn=5   cx=25   src/store/session.ts
 0.360  churn=3   cx=15   src/api/client.ts
 0.096  churn=2   cx=6    src/ui/Widget.tsx
@@ -54,6 +59,15 @@ non-blank lines plus branch keywords - not cyclomatic complexity. the score is n
 against the worst churn and the worst complexity in this run, so it ranks files within one
 repo and means nothing between two. test files are left out of the ranking (the same test-file
 rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests.
+
+the first line goes to stderr and names the measure behind the complexity column. with lizard
+on your `PATH` it reads `complexity: lizard` and the column is `ccn`: lizard's cyclomatic
+complexity, summed over the functions in each file, so a file with no functions scores 0. the two
+are different numbers, so a ranking taken with one does not compare with a ranking taken with
+the other; if lizard is on your `PATH` but fails, the line says so and the internal measure runs.
+churn needs no parser, so `hotspots` and `ownership` rank Go, C#, Java, Ruby, Rust, PHP, Swift,
+Kotlin, Scala and C/C++ files as well as TypeScript, JavaScript and Python (`_test.go` files count
+as tests).
 
 before you touch the top file, find out what it drags with it:
 
@@ -136,7 +150,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `trace <dir> <file>` - blast radius: everything that depends on a file
 - `dead` / `cycles` / `god` - orphans, import cycles, over-central modules
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
-- `dashboard <dir>` - the same ranking as a treemap on one html page
+- `dashboard <dir>` - the hotspot ranking as a treemap on one html page
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state
@@ -150,13 +164,17 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
   facts to narrate
 - `mcp` - run as an MCP server so an agent can query the risk map live
 
-multi-language: TypeScript / JavaScript / Python today.
+multi-language: the import graph, and every command built on it, reads TypeScript / JavaScript /
+Python today. `hotspots` and `ownership` also rank Go, C#, Java, Ruby, Rust, PHP, Swift, Kotlin,
+Scala and C/C++.
 
 ## the dashboard
 
 a ranked list tells you the order. it does not tell you how much of the codebase the top of
-that list actually is. `warpmap dashboard` answers that: the same ranking as a treemap, one
-box per source file, nested by directory.
+that list actually is. `warpmap dashboard` answers that: the ranking as a treemap, one box per
+source file, nested by directory. it ranks the TypeScript, JavaScript and Python files with the
+internal measure, so on a project with other languages, or with lizard on your `PATH`, it is
+not the list `hotspots` prints.
 
 ```
 $ warpmap dashboard . > dashboard.html
@@ -313,8 +331,10 @@ including a line that is not valid JSON, is skipped with no reply at all, so a c
 block waiting for one. a `tools/call` naming a tool it does not have is answered, but as
 ordinary text (`unknown tool: hotspot`) rather than a JSON-RPC error.
 
-both tools return a single text block. `hotspots` is the ranking, up to ten lines in the same
-order `warpmap hotspots` prints, without the churn and complexity columns. each line is the path
+both tools return a single text block. `hotspots` is the ranking, up to ten lines, without the
+churn and complexity columns; it ranks the TypeScript, JavaScript and Python files with the
+internal measure, so it is the order `warpmap hotspots` prints when the project has no other
+languages and lizard is not on the `PATH`. each line is the path
 first, then two spaces, then the score, so a client can take the first field as the file and the
 last as the number:
 
@@ -368,10 +388,12 @@ everything else stays on the machine. no package under `internal/` except `inter
 links a network stack, directly or transitively, and a test holds that line:
 `linkage_test.go` lists each package's dependencies with `go list` and fails on any `net` or
 `net/...`, and fails again if more than one package is allowed the exception. history comes
-from `git log`, run as a local subprocess against the directory you pointed at.
+from `git log`, run as a local subprocess against the directory you pointed at, and
+`hotspots` and `ownership` also start `lizard --csv` when lizard is on your `PATH`.
 
 two limits worth knowing. the test is about what warpmap links, not what a subprocess does:
-warpmap starts `git log` and nothing else, and what your git does from there is outside it. and
+warpmap starts `git log`, and `lizard` when it finds one, and nothing else, and what those do from
+there is outside it. and
 the github action is a separate script, `ci/pr-ratchet.sh`, that runs on your runner: it calls
 the github api with `curl` to write the pull request comment, and runs `git fetch` for the base
 commit when the checkout does not already have it.

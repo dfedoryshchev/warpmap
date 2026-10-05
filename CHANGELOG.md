@@ -18,10 +18,19 @@ All notable changes to this project are documented in this file.
 - README: an install section and a first-audit walkthrough, the configuration file, the GitHub
   Action, driving warpmap from an agent over MCP, and what talks to the network
 - `examples/worked-audit.md`: the audit loop run end to end against a real project
+- `hotspots` and `ownership` take cyclomatic complexity from `lizard` when it is on `PATH`
+  (its `--csv` output, summed over each file's functions, printed as `ccn=`), and the internal
+  measure (`cx=`) otherwise. A line on stderr names which one produced the numbers, and says so
+  when lizard is there but fails. The binary still has no dependencies; lizard is optional
 
 ### Changed
 - `brief` lists the dependents it shows in alphabetical order, and its label says how many of
   the total it shows
+- `hotspots` and `ownership` rank Go, C#, Java, Ruby, Rust, PHP, Swift, Kotlin, Scala and C/C++
+  files as well as TypeScript, JavaScript and Python. They read only the parsed languages before,
+  so on a Go or C# repository the ranking was a stray config file or nothing. The import graph
+  and the commands built on it still read only TypeScript, JavaScript and Python, and `_test.go`
+  files count as tests
 
 ### Fixed
 - `hotspots`, `trace`, `dead`, `cycles` and `god` printed files as walked (`..\proj\src\a.ts` on
