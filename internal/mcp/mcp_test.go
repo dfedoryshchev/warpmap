@@ -51,7 +51,94 @@ func tsFiles(dir string) []string {
 	return out
 }
 
-func callText(t *testing.T, tool string, args map[string]string) string {
+// chain writes src/a.ts -> src/b.ts -> src/c.ts, so both of the others depend on c.
+func chain(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range map[string]string{
+		"src/a.ts": "import { b } from \"./b\";\nexport const a = b + 1;\n",
+		"src/b.ts": "import { c } from \"./c\";\nexport const b = c + 1;\n",
+		"src/c.ts": "export const c = 1;\n",
+	} {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestToolsListOffersRiskAndTestgap(t *testing.T) {
+	var names []string
+	var riskSchema map[string]any
+	for _, spec := range toolSpecs() {
+		name := spec["name"].(string)
+		names = append(names, name)
+		if name == "risk" {
+			riskSchema = spec["inputSchema"].(map[string]any)
+		}
+	}
+	if got, want := strings.Join(names, ","), "hotspots,trace,risk,testgap"; got != want {
+		t.Fatalf("tools/list offers %s, want %s", got, want)
+	}
+	files, _ := riskSchema["properties"].(map[string]any)["files"].(map[string]any)
+	if files["type"] != "array" {
+		t.Fatalf("risk takes files as %v, want an array", files["type"])
+	}
+	if got := strings.Join(riskSchema["required"].([]string), ","); got != "dir,files" {
+		t.Fatalf("risk requires %s, want dir,files", got)
+	}
+}
+
+func TestTraceToolListsTheDependents(t *testing.T) {
+	dir := chain(t)
+	want := "2 files depend on src/c.ts\nsrc/a.ts\nsrc/b.ts\n"
+	if got := callText(t, "trace", map[string]any{"dir": dir, "file": "src/c.ts"}); got != want {
+		t.Errorf("absolute: trace text = %q, want %q", got, want)
+	}
+	t.Chdir(dir)
+	if got := callText(t, "trace", map[string]any{"dir": ".", "file": "src/c.ts"}); got != want {
+		t.Errorf("dot: trace text = %q, want %q", got, want)
+	}
+}
+
+func TestTestgapToolRanksUntestedFilesByBlastRadius(t *testing.T) {
+	dir := chain(t)
+	if err := os.MkdirAll(filepath.Join(dir, "tests"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setup := "import { a } from \"../src/a\";\nexport const s = a;\n"
+	if err := os.WriteFile(filepath.Join(dir, "tests", "setup.ts"), []byte(setup), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := "src/c.ts  3\nsrc/b.ts  2\n"
+	if got := callText(t, "testgap", map[string]any{"dir": dir}); got != want {
+		t.Errorf("testgap text = %q, want %q", got, want)
+	}
+}
+
+func TestRiskToolGivesTheVerdictUnderTheProjectThreshold(t *testing.T) {
+	dir := chain(t)
+	if err := os.WriteFile(filepath.Join(dir, "warpmap.json"), []byte(`{"thresholds":{"blast":1}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	risky := callText(t, "risk", map[string]any{"dir": dir, "files": []string{"src/c.ts"}})
+	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\n" +
+		"verdict: 1 changed file(s) are high-blast AND untested - add tests before changing\n"
+	if risky != want {
+		t.Errorf("risk on c text = %q, want %q", risky, want)
+	}
+	calm := callText(t, "risk", map[string]any{"dir": dir, "files": []string{"src/a.ts", "src/b.ts"}})
+	want = "  src/a.ts: blast=0, UNTESTED\n  src/b.ts: blast=1, UNTESTED\ncombined blast radius: 1 files\nverdict: manageable\n"
+	if calm != want {
+		t.Errorf("risk on a, b text = %q, want %q", calm, want)
+	}
+}
+
+func callText(t *testing.T, tool string, args map[string]any) string {
 	t.Helper()
 	params, _ := json.Marshal(map[string]any{"name": tool, "arguments": args})
 	r, w, err := os.Pipe()
@@ -102,7 +189,7 @@ func TestHotspotsToolPrintsPathThenScore(t *testing.T) {
 	want := "src/a.ts  1.000\nsrc/util/b.ts  0.028\n"
 	check := func(label, dir string) {
 		t.Helper()
-		got := callText(t, "hotspots", map[string]string{"dir": dir})
+		got := callText(t, "hotspots", map[string]any{"dir": dir})
 		if got != want {
 			t.Errorf("%s: hotspots text = %q, want %q", label, got, want)
 		}

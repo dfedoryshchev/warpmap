@@ -489,6 +489,24 @@ func TestTestgapCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
 	}
 }
 
+func TestRiskFailsOnAnUntestedChangePastTheThreshold(t *testing.T) {
+	dir := chainProject(t)
+	if err := os.WriteFile(filepath.Join(dir, config.FileName), []byte(`{"thresholds":{"blast":1}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := captureStdout(t, func() int { return riskCmd([]string{dir, "src/c.ts"}) })
+	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\n" +
+		"verdict: 1 changed file(s) are high-blast AND untested - add tests before changing\n"
+	if code != 1 || out != want {
+		t.Fatalf("risk exited %d and printed\n%swant 1 and\n%s", code, out, want)
+	}
+	out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/a.ts", "src/b.ts"}) })
+	want = "  src/a.ts: blast=0, UNTESTED\n  src/b.ts: blast=1, UNTESTED\ncombined blast radius: 1 files\nverdict: manageable\n"
+	if code != 0 || out != want {
+		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+}
+
 // git reads the path it is given from inside the project, so a project named
 // relative to where the caller stands used to match no history at all and
 // every file printed `authors=0`.

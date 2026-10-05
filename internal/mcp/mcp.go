@@ -1,5 +1,5 @@
 // Package mcp exposes warpmap's audit as an MCP server over stdio, so an agent can
-// query the risk map (hotspots, blast radius) before it touches code.
+// query the risk map (hotspots, blast radius, test gaps) before it touches code.
 package mcp
 
 import (
@@ -8,9 +8,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/dfedoryshchev/warpmap/internal/config"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
+	"github.com/dfedoryshchev/warpmap/internal/risk"
 	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
@@ -39,9 +43,19 @@ func toolSpecs() []map[string]any {
 		},
 		"required": []string{"dir", "file"},
 	}
+	riskArg := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"dir":   map[string]any{"type": "string"},
+			"files": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		},
+		"required": []string{"dir", "files"},
+	}
 	return []map[string]any{
 		{"name": "hotspots", "description": "rank the riskiest files (churn x complexity)", "inputSchema": dirArg},
 		{"name": "trace", "description": "blast radius: files that depend on a given file", "inputSchema": traceArg},
+		{"name": "risk", "description": "blast radius + test gaps for the files a change touches, with a verdict", "inputSchema": riskArg},
+		{"name": "testgap", "description": "untested files ranked by blast radius", "inputSchema": dirArg},
 	}
 }
 
@@ -87,8 +101,9 @@ func handleCall(req request, sources func(string) []string) {
 	var p struct {
 		Name string `json:"name"`
 		Args struct {
-			Dir  string `json:"dir"`
-			File string `json:"file"`
+			Dir   string   `json:"dir"`
+			File  string   `json:"file"`
+			Files []string `json:"files"`
 		} `json:"arguments"`
 	}
 	json.Unmarshal(req.Params, &p)
@@ -110,7 +125,36 @@ func handleCall(req request, sources func(string) []string) {
 	case "trace":
 		g := graph.Build(sources(p.Args.Dir))
 		br := trace.BlastRadius(g, filepath.Join(p.Args.Dir, p.Args.File), 0)
-		text = fmt.Sprintf("%d files depend on %s", len(br), p.Args.File)
+		text = fmt.Sprintf("%d files depend on %s\n", len(br), p.Args.File)
+		deps := make([]string, 0, len(br))
+		for _, f := range br {
+			deps = append(deps, projectPath(p.Args.Dir, f))
+		}
+		sort.Strings(deps)
+		for _, d := range deps {
+			text += d + "\n"
+		}
+	case "testgap":
+		for i, gap := range risk.TestGaps(p.Args.Dir, graph.Build(sources(p.Args.Dir))) {
+			if i >= 10 {
+				break
+			}
+			text += fmt.Sprintf("%s  %d\n", projectPath(p.Args.Dir, gap.File), gap.Blast)
+		}
+	case "risk":
+		if len(p.Args.Files) == 0 {
+			text = "risk needs at least one file in files"
+			break
+		}
+		g := graph.Build(sources(p.Args.Dir))
+		cfg, err := config.Load(p.Args.Dir)
+		if err != nil {
+			text = fmt.Sprintf("%s: %v", config.FileName, err)
+			break
+		}
+		var b strings.Builder
+		risk.Assess(p.Args.Dir, g, p.Args.Files, cfg.Thresholds.Blast).Write(&b)
+		text = b.String()
 	default:
 		text = "unknown tool: " + p.Name
 	}

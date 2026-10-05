@@ -318,11 +318,13 @@ $ warpmap mcp
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","clientInfo":{"name":"demo","version":"0.0.0"}}}
 {"id":1,"jsonrpc":"2.0","result":{"capabilities":{"tools":{}},"protocolVersion":"2024-11-05","serverInfo":{"name":"warpmap","version":"0.2.0-dev"}}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
-{"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"}]}}
+{"id":2,"jsonrpc":"2.0","result":{"tools":[{"description":"rank the riskiest files (churn x complexity)","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"hotspots"},{"description":"blast radius: files that depend on a given file","inputSchema":{"properties":{"dir":{"type":"string"},"file":{"type":"string"}},"required":["dir","file"],"type":"object"},"name":"trace"},{"description":"blast radius + test gaps for the files a change touches, with a verdict","inputSchema":{"properties":{"dir":{"type":"string"},"files":{"items":{"type":"string"},"type":"array"}},"required":["dir","files"],"type":"object"},"name":"risk"},{"description":"untested files ranked by blast radius","inputSchema":{"properties":{"dir":{"type":"string"}},"required":["dir"],"type":"object"},"name":"testgap"}]}}
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
 {"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"src/store/session.ts  1.000\nsrc/api/client.ts  0.360\nsrc/ui/Widget.tsx  0.096\nsrc/util/format.ts  0.072\nsrc/util/uuid.ts  0.024\nsrc/api/index.ts  0.008\nsrc/store/index.ts  0.008\n","type":"text"}]}}
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"trace","arguments":{"dir":".","file":"src/store/session.ts"}}}
-{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts","type":"text"}]}}
+{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts\nsrc/store/index.ts\nsrc/ui/Widget.tsx\ntests/session.test.ts\n","type":"text"}]}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"risk","arguments":{"dir":".","files":["src/store/session.ts"]}}}
+{"id":5,"jsonrpc":"2.0","result":{"content":[{"text":"  src/store/session.ts: blast=3, tested\ncombined blast radius: 3 files\nverdict: manageable\n","type":"text"}]}}
 ```
 
 the handshake advertises `tools` and nothing else: there are no resources and no prompts. the
@@ -331,7 +333,7 @@ including a line that is not valid JSON, is skipped with no reply at all, so a c
 block waiting for one. a `tools/call` naming a tool it does not have is answered, but as
 ordinary text (`unknown tool: hotspot`) rather than a JSON-RPC error.
 
-both tools return a single text block. `hotspots` is the ranking, up to ten lines, without the
+every tool returns a single text block. `hotspots` is the ranking, up to ten lines, without the
 churn and complexity columns; it ranks the TypeScript, JavaScript and Python files with the
 internal measure, so it is the order `warpmap hotspots` prints when the project has no other
 languages and lizard is not on the `PATH`. each line is the path
@@ -348,31 +350,37 @@ src/api/index.ts  0.008
 src/store/index.ts  0.008
 ```
 
-`trace` answers how big the blast radius is and only that: it returns the count, not the
-dependents. `warpmap trace` on the command line prints the files themselves, and
-`warpmap brief <dir> <file>` packs the hotspot rank, the blast radius and whether a test
-imports the file into one block, so an agent that can also run a command gets more than the two
-tools carry.
+`trace` opens with the count, then names every dependent on a line of its own, relative to
+`dir` and in alphabetical order, so the list is the same from one call to the next. `testgap`
+is the files no test imports, widest blast radius first, up to ten lines, each the path, two
+spaces, then how many files depend on it. `risk` takes the files a change is about to touch as
+`files`, a list of paths relative to `dir`, and answers with exactly the text `warpmap risk`
+prints: a line per file with its blast radius and whether a test imports it, the combined blast
+radius, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
+where the command exits 1 on a risky change, the tool says so only in the verdict line.
+`warpmap brief <dir> <file>` still packs the hotspot rank and the ownership count alongside the
+blast radius, so an agent that can also run a command gets more than the tools carry.
 
 four things worth knowing before wiring it up:
 
 - `dir` is resolved against the working directory the server was started in. an absolute path
   works too.
-- the path `hotspots` returns is relative to `dir`, with forward slashes on every platform,
-  however `dir` was spelled. that is exactly what `trace` wants as its `file` with the same
-  `dir`, so the two compose.
+- the paths `hotspots`, `trace` and `testgap` return are relative to `dir`, with forward
+  slashes on every platform, however `dir` was spelled. that is exactly what `trace` wants as
+  its `file` and `risk` wants in its `files` with the same `dir`, so the tools compose.
 - `warpmap.json` is read from the analysed directory, so a project's `ignore` globs apply to
   what the server reports.
 - churn comes from `git log`, so a directory with no history ranks every file 0.000, the same
   caveat as the first audit above.
 
 what an agent does with this is the audit loop one file at a time: `hotspots` to find where the
-risk sits, then `trace` on the file it is about to edit. a high count is the signal to read the
-dependents first, or to insist on a test, rather than to start typing.
+risk sits, then `trace` on the file it is about to edit, then `risk` on the whole set of files
+the change will touch. a high count is the signal to read the dependents first, or to insist on
+a test, rather than to start typing; `testgap` says where that test would buy the most.
 
 the runner i use is [agentweft](https://github.com/dfedoryshchev/agentweft), which starts an MCP
 server as a subprocess and speaks the same line-delimited JSON-RPC. nothing above is specific to
-it: the surface is two tools over stdio, and any MCP client can drive it.
+it: the surface is four tools over stdio, and any MCP client can drive it.
 
 ## what talks to the network
 

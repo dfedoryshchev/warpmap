@@ -22,10 +22,16 @@ All notable changes to this project are documented in this file.
   (its `--csv` output, summed over each file's functions, printed as `ccn=`), and the internal
   measure (`cx=`) otherwise. A line on stderr names which one produced the numbers, and says so
   when lizard is there but fails. The binary still has no dependencies; lizard is optional
+- `risk` and `testgap` as MCP tools. `risk` takes `dir` and a `files` list and answers with the
+  text `warpmap risk` prints, verdict included, under the project's `thresholds.blast`;
+  `testgap` lists up to ten untested files, widest blast radius first, as the path, two spaces,
+  then the count
 
 ### Changed
 - `brief` lists the dependents it shows in alphabetical order, and its label says how many of
   the total it shows
+- The MCP `trace` tool answered with the count alone; it now follows the count with every
+  dependent on its own line, relative to `dir` and in alphabetical order
 - `hotspots` and `ownership` rank Go, C#, Java, Ruby, Rust, PHP, Swift, Kotlin, Scala and C/C++
   files as well as TypeScript, JavaScript and Python. They read only the parsed languages before,
   so on a Go or C# repository the ranking was a stray config file or nothing. The import graph

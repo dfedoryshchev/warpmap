@@ -21,6 +21,7 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/mcp"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
+	"github.com/dfedoryshchev/warpmap/internal/risk"
 	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
@@ -350,23 +351,14 @@ func testgapCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap testgap <dir>")
 		return 2
 	}
-	g := graph.Build(sourceFiles(dir))
-	type row struct {
-		file  string
-		blast int
-	}
-	var rows []row
-	for _, f := range coverage.Untested(dir, g) {
-		rows = append(rows, row{f, len(trace.BlastRadius(g, f, 0))})
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].blast > rows[j].blast })
-	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(rows))
+	gaps := risk.TestGaps(dir, graph.Build(sourceFiles(dir)))
+	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(gaps))
 	limit := *top
-	if limit > len(rows) {
-		limit = len(rows)
+	if limit > len(gaps) {
+		limit = len(gaps)
 	}
-	for _, r := range rows[:limit] {
-		fmt.Printf("  blast=%-4d %s\n", r.blast, rel(dir, r.file))
+	for _, gap := range gaps[:limit] {
+		fmt.Printf("  blast=%-4d %s\n", gap.Blast, rel(dir, gap.File))
 	}
 	return 0
 }
@@ -457,34 +449,11 @@ func riskCmd(args []string) int {
 	}
 	dir, changed := rest[0], rest[1:]
 	blastLimit := loadConfig(dir).Thresholds.Blast
-	g := graph.Build(sourceFiles(dir))
-	untested := map[string]bool{}
-	for _, f := range coverage.Untested(dir, g) {
-		untested[f] = true
-	}
-	blast := map[string]bool{}
-	risky := 0
-	for _, cf := range changed {
-		abs := filepath.Join(dir, cf)
-		br := trace.BlastRadius(g, abs, 0)
-		for _, b := range br {
-			blast[b] = true
-		}
-		tag := "tested"
-		if untested[abs] {
-			tag = "UNTESTED"
-		}
-		fmt.Printf("  %s: blast=%d, %s\n", cf, len(br), tag)
-		if len(br) > blastLimit && untested[abs] {
-			risky++
-		}
-	}
-	fmt.Printf("combined blast radius: %d files\n", len(blast))
-	if risky > 0 {
-		fmt.Printf("verdict: %d changed file(s) are high-blast AND untested - add tests before changing\n", risky)
+	a := risk.Assess(dir, graph.Build(sourceFiles(dir)), changed, blastLimit)
+	a.Write(os.Stdout)
+	if a.Risky > 0 {
 		return 1
 	}
-	fmt.Println("verdict: manageable")
 	return 0
 }
 
