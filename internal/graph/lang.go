@@ -3,17 +3,19 @@ package graph
 import "path/filepath"
 
 // a language knows how to pull import specifiers out of a source file and resolve
-// a relative specifier to a file on disk. adding a language = one map entry.
+// a specifier to a file on disk. adding a language = one map entry.
 type language struct {
 	extract func(src string) []string
-	resolve func(fromFile, spec string) string
+	resolve func(p *project, fromFile, spec string) string
 }
 
+func resolveTsIn(_ *project, fromFile, spec string) string { return resolveTs(fromFile, spec) }
+
 var languages = map[string]language{
-	".ts":  {extractTs, resolveTs},
-	".tsx": {extractTs, resolveTs},
-	".js":  {extractTs, resolveTs},
-	".jsx": {extractTs, resolveTs},
+	".ts":  {extractTs, resolveTsIn},
+	".tsx": {extractTs, resolveTsIn},
+	".js":  {extractTs, resolveTsIn},
+	".jsx": {extractTs, resolveTsIn},
 	".py":  {extractPy, resolvePy},
 }
 

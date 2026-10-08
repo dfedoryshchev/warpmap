@@ -166,7 +166,10 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 
 multi-language: the import graph, and every command built on it, reads TypeScript / JavaScript /
 Python today. `hotspots` and `ownership` also rank Go, C#, Java, Ruby, Rust, PHP, Swift, Kotlin,
-Scala and C/C++.
+Scala and C/C++. a Python import, relative or absolute, resolves to the project's own files; an
+absolute one is looked up under the parent of each top-level package, the deepest directory
+holding every analysed file and its `src/`, and a script's own directory. a name with no file
+under those, like an installed package or the standard library, adds no edge.
 
 ## the dashboard
 

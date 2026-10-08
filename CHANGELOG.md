@@ -71,6 +71,14 @@ All notable changes to this project are documented in this file.
   absolute when `dir` was, with backslashes on windows; it is now relative to `dir` with forward
   slashes, which is the `file` that `trace` takes with the same `dir`. The command line
   `hotspots` table is unchanged
+- Python imports resolved only in the relative form (`from .mod import x`), so absolute
+  `from pkg.mod import x` and every `import pkg.mod` were missing from the graph, along with
+  everything built on it. Both now resolve to the project's own files, in a `src/` layout and
+  in a package without `__init__.py` too; a name with no file in the project, like an
+  installed package or the standard library, still adds no edge. `from pkg import mod`
+  now points at `pkg/mod.py` when `mod` is a submodule rather than at `pkg/__init__.py`,
+  which in a package whose modules did `from . import sibling` had shown up as import cycles
+  through `__init__.py`
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to
@@ -80,7 +88,10 @@ All notable changes to this project are documented in this file.
 - Imports are still extracted with regular expressions rather than a parser
 - Package specifiers are skipped, as are aliases that come only through a tsconfig `extends`
   chain
-- Python resolves relative imports only (`from .mod import x`)
+- Python resolves an absolute import only under the source roots warpmap can see from the
+  files (the parent of each top-level package, the deepest directory holding every analysed
+  file and its `src/`, and a script's own directory); paths added at run time through `sys.path` or `importlib` are not
+  followed
 - TypeScript / JavaScript / Python only
 
 ## 0.1.0 - 2026-08-02
