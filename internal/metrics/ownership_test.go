@@ -53,10 +53,10 @@ func TestOwnersAgreesWhateverTheProjectIsCalled(t *testing.T) {
 	check := func(label, dir string) {
 		t.Helper()
 		for f, authors := range want {
-			got := Owners(dir, filepath.Join(dir, filepath.FromSlash(f)))
+			got := Owners(filepath.Join(dir, filepath.FromSlash(f)))
 			slices.Sort(got)
 			if !slices.Equal(got, authors) {
-				t.Errorf("%s: Owners(%q, %s) = %v, want %v", label, dir, f, got, authors)
+				t.Errorf("%s: Owners under %q for %s = %v, want %v", label, dir, f, got, authors)
 			}
 		}
 	}

@@ -9,13 +9,12 @@ import (
 
 // Owners returns the distinct authors who have touched a file, most commits first.
 // a file only one person has ever touched is a bus-factor-1 knowledge risk.
-// file is a path the walk produced under repoDir; git reads its pathspec from
-// inside repoDir, so a repoDir that is itself relative has to come off it.
-func Owners(repoDir, file string) []string {
-	if r, err := filepath.Rel(repoDir, file); err == nil {
-		file = r
-	}
-	out, err := exec.Command("git", "-C", repoDir, "log", "--format=%an", "--", file).Output()
+// git is asked from the file's own directory, so the answer comes from the repo
+// that holds the file - a nested repo or a submodule included, whose history the
+// project's top repo does not have - and the pathspec is just the file's name,
+// whatever the caller's working directory.
+func Owners(file string) []string {
+	out, err := exec.Command("git", "-C", filepath.Dir(file), "log", "--format=%an", "--", filepath.Base(file)).Output()
 	if err != nil {
 		return nil
 	}

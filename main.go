@@ -133,29 +133,118 @@ func rankedFiles(dir string) []string { return walk(dir, rankedExt) }
 
 func walk(dir string, exts map[string]bool) []string {
 	cfg := loadConfig(dir)
-	var out []string
-	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	ignoredDir := map[string]bool{}
+	// the walk's own path is what gets matched, relative to the project, so a
+	// pattern means the same thing however the caller spelled the dir. a git
+	// listing hands over files, not directories, so every parent of a file is
+	// matched as well, or `dist` would only ever skip a file named dist.
+	ignored := func(r string) bool {
+		for i := 0; i < len(r); i++ {
+			if r[i] != '/' {
+				continue
+			}
+			ig, seen := ignoredDir[r[:i]]
+			if !seen {
+				ig = cfg.Ignored(r[:i])
+				ignoredDir[r[:i]] = ig
+			}
+			if ig {
+				return true
+			}
 		}
-		// the walk's own path is what gets matched, relative to the project, so
-		// a pattern means the same thing however the caller spelled the dir.
-		if d.IsDir() {
-			if r := rel(dir, p); r != "." && cfg.Ignored(r) {
+		return cfg.Ignored(r)
+	}
+	var out []string
+	var fromGit func(root string) bool
+	var onDisk func(root string)
+	fromGit = func(root string) bool {
+		entries, ok := gitFiles(root)
+		if !ok {
+			return false
+		}
+		for _, e := range entries {
+			p := filepath.Join(root, filepath.FromSlash(strings.TrimSuffix(e, "/")))
+			fi, err := os.Lstat(p)
+			if err != nil || ignored(rel(dir, p)) {
+				continue
+			}
+			if !fi.IsDir() {
+				if exts[filepath.Ext(p)] {
+					out = append(out, p)
+				}
+				continue
+			}
+			// git lists a nested repo or a submodule as one entry and never looks
+			// inside it, so its files have to come from its own git.
+			if hasGit(p) && !fromGit(p) {
+				onDisk(p)
+			}
+		}
+		return true
+	}
+	onDisk = func(root string) {
+		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if p != root && ignored(rel(dir, p)) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !d.IsDir() {
+				if exts[filepath.Ext(p)] {
+					out = append(out, p)
+				}
+				return nil
+			}
+			if p != root && hasGit(p) && fromGit(p) {
 				return filepath.SkipDir
 			}
 			return nil
-		}
-		if !exts[filepath.Ext(p)] {
-			return nil
-		}
-		if cfg.Ignored(rel(dir, p)) {
-			return nil
-		}
-		out = append(out, p)
-		return nil
-	})
+		})
+	}
+	if !fromGit(dir) {
+		onDisk(dir)
+	}
+	sortWalkOrder(out)
 	return out
+}
+
+func hasGit(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// gitFiles asks git for the files under dir, relative to it: tracked ones plus
+// untracked ones .gitignore does not drop. ok is false when dir is not in a
+// repo, when git is not installed, and when the repo it sits in ignores dir
+// itself - a folder of clones kept out of an outer repo lists empty there, and
+// has to be walked for the repos inside it instead.
+func gitFiles(dir string) (entries []string, ok bool) {
+	out, err := exec.Command("git", "-C", dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
+	if err != nil {
+		return nil, false
+	}
+	for _, e := range strings.Split(string(out), "\x00") {
+		if e != "" {
+			entries = append(entries, e)
+		}
+	}
+	if len(entries) == 0 && exec.Command("git", "-C", dir, "check-ignore", "-q", ".").Run() == nil {
+		return nil, false
+	}
+	return entries, true
+}
+
+// sortWalkOrder puts files in the order filepath.WalkDir visits them. git
+// reports tracked and untracked files as two separately sorted runs, and ties
+// in a ranking keep list order, so without it the same project could rank
+// differently depending on what had been committed yet.
+func sortWalkOrder(files []string) {
+	key := func(p string) string { return strings.ReplaceAll(filepath.ToSlash(p), "/", "\x00") }
+	sort.SliceStable(files, func(i, j int) bool { return key(files[i]) < key(files[j]) })
 }
 
 // rel turns a path the source walk produced into the one spelling every
@@ -180,11 +269,12 @@ func hotspotsCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap hotspots <dir>")
 		return 2
 	}
-	churn, err := metrics.GitChurn(dir, 6)
+	files := rankedFiles(dir)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
-	ranked, column := rankHotspots(dir, rankedFiles(dir), churn)
+	ranked, column := rankHotspots(dir, files, churn)
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
@@ -374,7 +464,7 @@ func briefCmd(args []string) int {
 	abs := filepath.Join(dir, file)
 	files := sourceFiles(dir)
 	g := graph.Build(files)
-	churn, err := metrics.GitChurn(dir, 6)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
@@ -391,7 +481,7 @@ func briefCmd(args []string) int {
 		untested[f] = true
 	}
 	blast := trace.BlastRadius(g, abs, 0)
-	owners := metrics.Owners(dir, abs)
+	owners := metrics.Owners(abs)
 
 	fmt.Printf("# brief: %s\n\n", file)
 	fmt.Printf("- hotspot rank: %d of %d (churn %d, complexity %d)\n", rank, len(ranked), h.Churn, h.Complexity)
@@ -421,7 +511,7 @@ func explainCmd(args []string) int {
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.GitChurn(dir, 6)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
@@ -465,18 +555,19 @@ func ownershipCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap ownership <dir>")
 		return 2
 	}
-	churn, err := metrics.GitChurn(dir, 6)
+	files := rankedFiles(dir)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
-	ranked, _ := rankHotspots(dir, rankedFiles(dir), churn)
+	ranked, _ := rankHotspots(dir, files, churn)
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
 	}
 	fmt.Println("hotspots by knowledge spread (bus-factor-1 = only one person has touched it):")
 	for _, h := range ranked[:limit] {
-		owners := metrics.Owners(dir, h.File)
+		owners := metrics.Owners(h.File)
 		note := ""
 		if len(owners) == 1 {
 			note = "  <- bus factor 1"
@@ -544,7 +635,7 @@ func reportCmd(args []string) int {
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.GitChurn(dir, 6)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}
@@ -580,7 +671,7 @@ func dashboardCmd(args []string) int {
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.GitChurn(dir, 6)
+	churn, err := metrics.ProjectChurn(dir, files, 6)
 	if err != nil {
 		churn = metrics.Churn{}
 	}

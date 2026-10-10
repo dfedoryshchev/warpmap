@@ -112,7 +112,7 @@ func handleCall(req request, sources func(string) []string) {
 	switch p.Name {
 	case "hotspots":
 		files := sources(p.Args.Dir)
-		churn, err := metrics.GitChurn(p.Args.Dir, 6)
+		churn, err := metrics.ProjectChurn(p.Args.Dir, files, 6)
 		if err != nil {
 			churn = metrics.Churn{}
 		}

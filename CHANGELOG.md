@@ -79,6 +79,16 @@ All notable changes to this project are documented in this file.
   now points at `pkg/mod.py` when `mod` is a submodule rather than at `pkg/__init__.py`,
   which in a package whose modules did `from . import sibling` had shown up as import cycles
   through `__init__.py`
+- The walk skipped only its own short list of directories, so anything else `.gitignore`
+  drops - a virtual environment under another name, a tool cache, generated output - was read
+  as source; on one Python repository with 516 tracked source files it read 6,266. Inside a git
+  repo the file list now comes from `git ls-files` (tracked, plus untracked files `.gitignore`
+  does not drop), with the built-ins and `warpmap.json` still applied on top. A nested repo or
+  submodule is listed by its own git under its own `.gitignore`, and a folder no repo covers,
+  such as a code drop or a folder of checkouts, is still walked, with any repo found in it
+  listed the same way. Churn and ownership are read from the repo that holds each file, so a
+  folder of checkouts and a nested repo no longer rank every one of their files at churn 0 with
+  no authors
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

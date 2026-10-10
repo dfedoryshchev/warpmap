@@ -31,7 +31,9 @@ warpmap 0.2.0-dev
 
 point it at a repo you did not write and work from the project root. churn comes out of
 `git log`, so the directory has to be a git checkout - without history every hotspot scores
-0.000 and the ranking tells you nothing.
+0.000 and the ranking tells you nothing. a folder that holds several checkouts works too, and so
+does a repo with nested repos or submodules: each repo is read with its own history and its own
+`.gitignore`.
 
 the numbers below are from a small sample project, so they are small. the shape is the point.
 
@@ -222,6 +224,16 @@ matches a directory of that name at any depth, the way the built-ins do; a patte
 is anchored where you wrote it, so `src/generated` skips that one and leaves `lib/generated`
 alone.
 
+both lists apply on top of git's. inside a repo, the files read are the ones `git ls-files`
+lists: tracked, plus untracked ones `.gitignore` does not drop, so a virtual environment or a
+cache under any name stays out without being listed here. git lists a nested repo or a
+submodule as one entry, so each is asked for its own files under its own `.gitignore`; one the
+outer repo ignores stays out with everything else it ignores. a folder
+no repo covers - a code drop with no history, or a folder of checkouts - is walked on disk, and
+any repo found in it is listed by its own git; so is a folder its outer repo ignores, which is
+how a folder of clones kept out of a parent repo still gets read. without `git` on `PATH`,
+everything is walked.
+
 `thresholds.blast` is where `risk` starts calling a change risky: a file with more than this
 many dependents, and no test, is what it reports and exits non-zero on. the default is 10.
 
@@ -398,12 +410,14 @@ deprecated and goes in 0.3.0.
 everything else stays on the machine. no package under `internal/` except `internal/explain`
 links a network stack, directly or transitively, and a test holds that line:
 `linkage_test.go` lists each package's dependencies with `go list` and fails on any `net` or
-`net/...`, and fails again if more than one package is allowed the exception. history comes
-from `git log`, run as a local subprocess against the directory you pointed at, and
-`hotspots` and `ownership` also start `lizard --csv` when lizard is on your `PATH`.
+`net/...`, and fails again if more than one package is allowed the exception. the file list
+comes from `git ls-files` (and `git check-ignore`, to tell an ignored folder from an empty one)
+and history from `git log`, each run as a local subprocess in the directory you pointed at or a
+repo found under it, and `hotspots` and `ownership` also start `lizard --csv` when lizard is on
+your `PATH`.
 
 two limits worth knowing. the test is about what warpmap links, not what a subprocess does:
-warpmap starts `git log`, and `lizard` when it finds one, and nothing else, and what those do from
+warpmap starts `git`, and `lizard` when it finds one, and nothing else, and what those do from
 there is outside it. and
 the github action is a separate script, `ci/pr-ratchet.sh`, that runs on your runner: it calls
 the github api with `curl` to write the pull request comment, and runs `git fetch` for the base

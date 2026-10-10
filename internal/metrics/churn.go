@@ -2,8 +2,11 @@ package metrics
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -36,4 +39,70 @@ func GitChurn(repoDir string, windowMonths int) (Churn, error) {
 		churn[normalizeRename(parts[2])]++
 	}
 	return churn, nil
+}
+
+// ProjectChurn is GitChurn for a project whose files may sit in more than one
+// repo: a folder of clones, or a repo holding nested repos or submodules. The
+// repo at dir is read as GitChurn reads it; every other repo that holds one of
+// files is asked about its own history, and its paths are keyed relative to
+// dir, where the lookup expects them. The error is GitChurn's for dir, and only
+// when no other repo answered either.
+func ProjectChurn(dir string, files []string, windowMonths int) (Churn, error) {
+	churn, err := GitChurn(dir, windowMonths)
+	if churn == nil {
+		churn = Churn{}
+	}
+	answered := err == nil
+	for _, root := range nestedRepos(dir, files) {
+		c, cerr := GitChurn(root, windowMonths)
+		if cerr != nil {
+			continue
+		}
+		answered = true
+		prefix, rerr := filepath.Rel(dir, root)
+		if rerr != nil {
+			continue
+		}
+		prefix = filepath.ToSlash(prefix) + "/"
+		for p, n := range c {
+			churn[prefix+p] += n
+		}
+	}
+	if !answered {
+		return nil, err
+	}
+	return churn, nil
+}
+
+// nestedRepos finds the root of every repo below dir that holds one of files,
+// by looking for the nearest .git above each file's directory.
+func nestedRepos(dir string, files []string) []string {
+	top := filepath.Clean(dir)
+	rootOf := map[string]string{}
+	var find func(d string) string
+	find = func(d string) string {
+		if r, ok := rootOf[d]; ok {
+			return r
+		}
+		r := ""
+		if d != top {
+			if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+				r = d
+			} else if parent := filepath.Dir(d); parent != d {
+				r = find(parent)
+			}
+		}
+		rootOf[d] = r
+		return r
+	}
+	seen := map[string]bool{}
+	var roots []string
+	for _, f := range files {
+		if r := find(filepath.Dir(f)); r != "" && !seen[r] {
+			seen[r] = true
+			roots = append(roots, r)
+		}
+	}
+	sort.Strings(roots)
+	return roots
 }
