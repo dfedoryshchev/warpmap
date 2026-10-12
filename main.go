@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
@@ -36,7 +38,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: warpmap <command> [args]")
 	fmt.Fprintln(w, "commands:")
 	fmt.Fprintln(w, "  analyze <dir>          dependency graph (--json, --dot)")
-	fmt.Fprintln(w, "  hotspots <dir>         rank files by churn x complexity")
+	fmt.Fprintln(w, "  hotspots <dir>         rank files by churn x complexity (--months, default 6)")
 	fmt.Fprintln(w, "  trace <dir> <file>     blast radius of a file (--depth)")
 	fmt.Fprintln(w, "  dead <dir>             files nothing imports")
 	fmt.Fprintln(w, "  cycles <dir>           import cycles")
@@ -261,20 +263,40 @@ func rel(dir, f string) string {
 	return filepath.ToSlash(r)
 }
 
+type monthsValue int
+
+func (m *monthsValue) String() string { return strconv.Itoa(int(*m)) }
+
+func (m *monthsValue) Set(s string) error {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return errors.New("want a whole number of months, 1 or more")
+	}
+	*m = monthsValue(n)
+	return nil
+}
+
+// monthsFlag registers --months, how far back churn reads, on every command
+// that ranks by it.
+func monthsFlag(fset *flag.FlagSet) *monthsValue {
+	m := monthsValue(6)
+	fset.Var(&m, "months", "how many months of git history churn reads")
+	return &m
+}
+
 func hotspotsCmd(args []string) int {
 	fset := flag.NewFlagSet("hotspots", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
+	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap hotspots <dir>")
 		return 2
 	}
 	files := rankedFiles(dir)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
 	ranked, column := rankHotspots(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(ranked))
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
@@ -455,6 +477,7 @@ func testgapCmd(args []string) int {
 
 func briefCmd(args []string) int {
 	fset := flag.NewFlagSet("brief", flag.ExitOnError)
+	months := monthsFlag(fset)
 	rest := parseArgs(fset, args)
 	if len(rest) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: warpmap brief <dir> <file>  (a context pack to hand an agent)")
@@ -464,11 +487,9 @@ func briefCmd(args []string) int {
 	abs := filepath.Join(dir, file)
 	files := sourceFiles(dir)
 	g := graph.Build(files)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
 	ranked := metrics.Hotspots(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(ranked))
 	rank, h := 0, metrics.Hotspot{}
 	for i, r := range ranked {
 		if r.File == abs {
@@ -505,18 +526,17 @@ func briefCmd(args []string) int {
 func explainCmd(args []string) int {
 	fset := flag.NewFlagSet("explain", flag.ExitOnError)
 	top := fset.Int("n", 1, "how many hotspots to explain")
+	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap explain <dir>  (set ANTHROPIC_API_KEY + WARPMAP_MODEL, or runs offline)")
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
 	g := graph.Build(files)
 	ranked := metrics.Hotspots(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(ranked))
 	opts := explain.Options{Model: os.Getenv("WARPMAP_MODEL"), APIKey: os.Getenv("ANTHROPIC_API_KEY")}
 	limit := *top
 	if limit > len(ranked) {
@@ -550,17 +570,16 @@ func riskCmd(args []string) int {
 func ownershipCmd(args []string) int {
 	fset := flag.NewFlagSet("ownership", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many hotspots to check")
+	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap ownership <dir>")
 		return 2
 	}
 	files := rankedFiles(dir)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
 	ranked, _ := rankHotspots(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(ranked))
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
@@ -629,17 +648,16 @@ func reportCmd(args []string) int {
 	fset := flag.NewFlagSet("report", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
 	asJSON := fset.Bool("json", false, "render the audit as json for the evidence pack")
+	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap report <dir>")
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
 	r := report.Build(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
 	doc := r.Markdown()
 	if *asJSON {
 		pack, err := r.JSON()
@@ -665,16 +683,16 @@ func reportCmd(args []string) int {
 func dashboardCmd(args []string) int {
 	fset := flag.NewFlagSet("dashboard", flag.ExitOnError)
 	out := fset.String("o", "", "write to a file instead of stdout")
+	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap dashboard <dir>  (one self-contained html page)")
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, err := metrics.ProjectChurn(dir, files, 6)
-	if err != nil {
-		churn = metrics.Churn{}
-	}
+	churn, window := metrics.ProjectChurn(dir, files, int(*months))
+	ranked := metrics.Hotspots(dir, files, churn)
+	fmt.Fprintln(os.Stderr, window.Note(ranked))
 	g := graph.Build(files)
 	page := dashboard.Page{
 		Project: projectName(dir),
@@ -682,7 +700,7 @@ func dashboardCmd(args []string) int {
 		Files:   len(g.Files),
 		Edges:   len(g.Edges),
 	}
-	for _, h := range metrics.Hotspots(dir, files, churn) {
+	for _, h := range ranked {
 		page.Hotspots = append(page.Hotspots, dashboard.Item{
 			Path:       rel(dir, h.File),
 			Churn:      h.Churn,

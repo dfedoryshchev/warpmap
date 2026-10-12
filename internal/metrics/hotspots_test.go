@@ -70,3 +70,23 @@ func TestHotspotsLeavesTestFilesOut(t *testing.T) {
 	t.Chdir(dir)
 	check("dot", ".")
 }
+
+func TestHotspotsRankByComplexityWhenNothingChurned(t *testing.T) {
+	dir := t.TempDir()
+	files := writeFiles(t, dir, map[string]string{
+		"src/a.ts": "export const a = 1;\n",
+		"src/b.ts": strings.Repeat("if (x) { y(); }\n", 10),
+		"src/c.ts": strings.Repeat("if (x) { y(); }\n", 5),
+	})
+	var got []string
+	for _, h := range Hotspots(dir, files, Churn{}) {
+		r, _ := filepath.Rel(dir, h.File)
+		got = append(got, filepath.ToSlash(r))
+		if h.Score == 0 {
+			t.Errorf("%s scored 0 with complexity %d", filepath.ToSlash(r), h.Complexity)
+		}
+	}
+	if want := "src/b.ts,src/c.ts,src/a.ts"; strings.Join(got, ",") != want {
+		t.Fatalf("with no churn anywhere, ranked %v, want most complex first: %s", got, want)
+	}
+}

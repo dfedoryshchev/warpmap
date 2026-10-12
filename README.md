@@ -30,10 +30,11 @@ warpmap 0.2.0-dev
 ## your first audit
 
 point it at a repo you did not write and work from the project root. churn comes out of
-`git log`, so the directory has to be a git checkout - without history every hotspot scores
-0.000 and the ranking tells you nothing. a folder that holds several checkouts works too, and so
-does a repo with nested repos or submodules: each repo is read with its own history and its own
-`.gitignore`.
+`git log`, so the directory should be a git checkout - without history there is no churn, and the
+ranking falls back to complexity alone and says so. a folder that holds several checkouts works
+too, and so does a repo with nested repos or submodules: each repo is read with its own history
+and its own `.gitignore`. a directory below the repo root works as well: only the commits that
+touched it count.
 
 the numbers below are from a small sample project, so they are small. the shape is the point.
 
@@ -56,7 +57,8 @@ complexity: internal (cx = non-blank lines + 3 x branch keywords); lizard on PAT
 0.072  churn=1   cx=9    src/util/format.ts
 ```
 
-churn is how many commits touched the file in the last 6 months. cx is a structural proxy -
+churn is how many commits touched the file in the last 6 months; `--months 24` reads further
+back, on every command that ranks by churn. cx is a structural proxy -
 non-blank lines plus branch keywords - not cyclomatic complexity. the score is normalised
 against the worst churn and the worst complexity in this run, so it ranks files within one
 repo and means nothing between two. test files are left out of the ranking (the same test-file
@@ -67,6 +69,15 @@ on your `PATH` it reads `complexity: lizard` and the column is `ccn`: lizard's c
 complexity, summed over the functions in each file, so a file with no functions scores 0. the two
 are different numbers, so a ranking taken with one does not compare with a ranking taken with
 the other; if lizard is on your `PATH` but fails, the line says so and the internal measure runs.
+
+a second stderr line counts the commits the churn column rests on,
+`churn: <n> commits in the last 6 months`, on every command that ranks by churn. under 20 commits
+it adds a warning: on a window that thin, churn 2 against churn 3 is chance, and the normalised
+score hides how few commits it came from, so widen the window with `--months` or read the ranking
+as complexity first. when no ranked file has churn at all - no git, a zip download, a repo whose
+last commit is older than the window - the score is complexity alone and the line says
+`ranked by complexity alone`.
+
 churn needs no parser, so `hotspots` and `ownership` rank Go, C#, Java, Ruby, Rust, PHP, Swift,
 Kotlin, Scala and C/C++ files as well as TypeScript, JavaScript and Python (`_test.go` files count
 as tests).
@@ -385,8 +396,9 @@ four things worth knowing before wiring it up:
   its `file` and `risk` wants in its `files` with the same `dir`, so the tools compose.
 - `warpmap.json` is read from the analysed directory, so a project's `ignore` globs apply to
   what the server reports.
-- churn comes from `git log`, so a directory with no history ranks every file 0.000, the same
-  caveat as the first audit above.
+- churn comes from `git log` over the last 6 months, so a directory with no history in that
+  window is ranked by complexity alone, the same caveat as the first audit above. the line
+  counting the window's commits goes to the server's stderr, never into the tool's text.
 
 what an agent does with this is the audit loop one file at a time: `hotspots` to find where the
 risk sits, then `trace` on the file it is about to edit, then `risk` on the whole set of files

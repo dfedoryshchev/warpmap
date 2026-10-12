@@ -15,13 +15,17 @@ type Hotspot struct {
 }
 
 // Hotspots ranks files by normalized churn x complexity: the files that change
-// often AND are hard to change. files are absolute paths; churn is keyed
-// repo-relative with forward slashes (as git reports), so each is relativized and
-// slash-normalized before the lookup - on Windows filepath.Rel yields backslashes,
+// often AND are hard to change. files are absolute paths; churn is keyed relative
+// to repoDir with forward slashes (as ProjectChurn reads it), so each is relativized
+// and slash-normalized before the lookup - on Windows filepath.Rel yields backslashes,
 // which never matched git's keys and silently zeroed every churn count.
 //
 // Test files are dropped before the normalisation, not after: a suite churns with
 // the code it covers and is often longer, so it would set the scale for the rest.
+//
+// When no file has churn - no git, or nothing in the window - the score is the
+// complexity share alone; multiplying by zero would leave every file at 0 in
+// walk order.
 func Hotspots(repoDir string, files []string, churn Churn) []Hotspot {
 	return rank(repoDir, shipped(repoDir, files), churn, func(f string) int {
 		cx, _ := FileComplexity(f)
@@ -42,7 +46,7 @@ func shipped(repoDir string, files []string) []string {
 
 func rank(repoDir string, files []string, churn Churn, complexity func(string) int) []Hotspot {
 	rows := make([]Hotspot, 0, len(files))
-	maxChurn, maxCx := 1, 1
+	maxChurn, maxCx := 0, 1
 	for _, f := range files {
 		rel, _ := filepath.Rel(repoDir, f)
 		c := churn[filepath.ToSlash(rel)]
@@ -56,8 +60,11 @@ func rank(repoDir string, files []string, churn Churn, complexity func(string) i
 		rows = append(rows, Hotspot{File: f, Churn: c, Complexity: cx})
 	}
 	for i := range rows {
-		rows[i].Score = (float64(rows[i].Churn) / float64(maxChurn)) *
-			(float64(rows[i].Complexity) / float64(maxCx))
+		share := 1.0
+		if maxChurn > 0 {
+			share = float64(rows[i].Churn) / float64(maxChurn)
+		}
+		rows[i].Score = share * (float64(rows[i].Complexity) / float64(maxCx))
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Score > rows[j].Score })
 	return rows

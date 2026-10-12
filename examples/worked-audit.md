@@ -22,8 +22,10 @@ $ cd react-formkit
 $ git checkout 45bcba0
 ```
 
-churn comes out of `git log`, so warpmap wants the history: a zip download or a `--depth 1`
-clone ranks every file 0.000 and the ranking tells you nothing. the checkout pins the commit
+churn comes out of `git log`, so warpmap wants the history: a zip download has none and ranks
+on complexity alone, and a `--depth 1` clone holds one commit, so every file has the same churn.
+either way the churn half of the ranking tells you nothing, and the stderr line that counts the
+commits says so. the checkout pins the commit
 these numbers were taken at, since the project keeps moving. everything below is run from the
 project root, spelled `.`.
 

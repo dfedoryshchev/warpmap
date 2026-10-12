@@ -26,6 +26,10 @@ All notable changes to this project are documented in this file.
   text `warpmap risk` prints, verdict included, under the project's `thresholds.blast`;
   `testgap` lists up to ten untested files, widest blast radius first, as the path, two spaces,
   then the count
+- Every command that ranks by churn prints how many commits its window holds on stderr, and
+  warns under 20, where churn differences are mostly noise, or when it ranked by complexity
+  alone. `--months` sets the window, 6 by default. The MCP tool text is unchanged; the line goes
+  to the server's stderr
 
 ### Changed
 - `brief` lists the dependents it shows in alphabetical order, and its label says how many of
@@ -89,6 +93,13 @@ All notable changes to this project are documented in this file.
   listed the same way. Churn and ownership are read from the repo that holds each file, so a
   folder of checkouts and a nested repo no longer rank every one of their files at churn 0 with
   no authors
+- With no churn anywhere - no git, or a repo whose last commit is older than the window - every
+  hotspot scored 0.000 and the table kept walk order, so the most complex file could sit last
+  with nothing to say the ranking was empty. The score is now complexity alone in that case, in
+  `hotspots`, `ownership`, `brief`, `report`, `dashboard` and the MCP `hotspots` tool
+- Pointed at a directory below the repo root, churn missed every file, because git names a
+  changed file from the root and the lookup used the path from the directory. Churn is now read
+  from that directory's own changes, named relative to it
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

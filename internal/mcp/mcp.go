@@ -112,11 +112,10 @@ func handleCall(req request, sources func(string) []string) {
 	switch p.Name {
 	case "hotspots":
 		files := sources(p.Args.Dir)
-		churn, err := metrics.ProjectChurn(p.Args.Dir, files, 6)
-		if err != nil {
-			churn = metrics.Churn{}
-		}
-		for i, h := range metrics.Hotspots(p.Args.Dir, files, churn) {
+		churn, window := metrics.ProjectChurn(p.Args.Dir, files, 6)
+		ranked := metrics.Hotspots(p.Args.Dir, files, churn)
+		fmt.Fprintln(os.Stderr, window.Note(ranked))
+		for i, h := range ranked {
 			if i >= 10 {
 				break
 			}
