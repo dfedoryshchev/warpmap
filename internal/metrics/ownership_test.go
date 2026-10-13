@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -19,20 +20,21 @@ func gitIn(t *testing.T, dir string, args ...string) {
 
 func commitAs(t *testing.T, repo, author, file, body string) {
 	t.Helper()
+	commitAsEmail(t, repo, author, strings.ToLower(author)+"@example.com", file, body)
+}
+
+func commitAsEmail(t *testing.T, repo, author, email, file, body string) {
+	t.Helper()
 	if err := os.WriteFile(filepath.Join(repo, filepath.FromSlash(file)), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	gitIn(t, repo, "add", "--", file)
-	gitIn(t, repo, "-c", "user.name="+author, "-c", "user.email=a@example.com", "commit", "-m", "edit "+file)
+	gitIn(t, repo, "-c", "user.name="+author, "-c", "user.email="+email, "commit", "-m", "edit "+file)
 }
 
-// the walk hands Owners a path spelled from wherever the caller stood, while
-// git reads it from inside the repository, so the same file has to come back
-// with the same authors however the project was named.
-func TestOwnersAgreesWhateverTheProjectIsCalled(t *testing.T) {
-	root := t.TempDir()
-	repo := filepath.Join(root, "proj")
-	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+func initRepo(t *testing.T, repo string) {
+	t.Helper()
+	if err := os.MkdirAll(repo, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	gitIn(t, repo, "init")
@@ -45,6 +47,46 @@ func TestOwnersAgreesWhateverTheProjectIsCalled(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+func TestOwnersCountsOnePersonOnceWhateverNameTheyCommittedUnder(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	commitAsEmail(t, repo, "Ada Example", "ada@example.com", "a.ts", "export const a = 1;\n")
+	commitAsEmail(t, repo, "ada", "ADA@example.com", "a.ts", "export const a = 2;\n")
+	commitAsEmail(t, repo, "Ada Example", "ada@example.com", "a.ts", "export const a = 3;\n")
+	commitAsEmail(t, repo, "Bo Example", "bo@example.com", "a.ts", "export const a = 4;\n")
+	commitAsEmail(t, repo, "bo example", "bo@home.example.org", "a.ts", "export const a = 5;\n")
+	commitAsEmail(t, repo, "Bo Example", "bo@example.com", "a.ts", "export const a = 6;\n")
+	commitAsEmail(t, repo, "Cy", "cy@example.com", "a.ts", "export const a = 7;\n")
+	commitAsEmail(t, repo, "cy-laptop", "root@localhost", "a.ts", "export const a = 8;\n")
+
+	got := Owners(filepath.Join(repo, "a.ts"))
+	slices.Sort(got)
+	if want := []string{"Ada Example", "Bo Example", "Cy", "cy-laptop"}; !slices.Equal(got, want) {
+		t.Fatalf("without a mailmap: Owners = %v, want %v", got, want)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, ".mailmap"), []byte("Cy <cy@example.com> cy-laptop <root@localhost>\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Owners(filepath.Join(repo, "a.ts"))
+	slices.Sort(got)
+	if want := []string{"Ada Example", "Bo Example", "Cy"}; !slices.Equal(got, want) {
+		t.Fatalf("with a mailmap: Owners = %v, want %v", got, want)
+	}
+}
+
+// the walk hands Owners a path spelled from wherever the caller stood, while
+// git reads it from inside the repository, so the same file has to come back
+// with the same authors however the project was named.
+func TestOwnersAgreesWhateverTheProjectIsCalled(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "proj")
+	initRepo(t, repo)
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	commitAs(t, repo, "Ada", "src/a.ts", "export const a = 1;\n")
 	commitAs(t, repo, "Bo", "src/a.ts", "export const a = 2;\n")
 	commitAs(t, repo, "Ada", "src/b.ts", "export const b = 1;\n")

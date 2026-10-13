@@ -184,6 +184,11 @@ absolute one is looked up under the parent of each top-level package, the deepes
 holding every analysed file and its `src/`, and a script's own directory. a name with no file
 under those, like an installed package or the standard library, adds no edge.
 
+authors: `ownership` and `brief` count people, not name strings. git applies the repo's
+`.mailmap` first, then commits that share an email, or a name up to case, count as one person,
+shown under the name they used most. someone who committed under a different name AND a different
+email, with no `.mailmap` line joining the two, still counts twice; add the line to fix the count.
+
 ## the dashboard
 
 a ranked list tells you the order. it does not tell you how much of the codebase the top of

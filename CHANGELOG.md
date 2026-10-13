@@ -100,6 +100,11 @@ All notable changes to this project are documented in this file.
 - Pointed at a directory below the repo root, churn missed every file, because git names a
   changed file from the root and the lookup used the path from the directory. Churn is now read
   from that directory's own changes, named relative to it
+- `ownership` and `brief` counted every distinct author name as a separate person, so one
+  person who committed under several spellings raised the author count and could hide a bus
+  factor of 1. Authors are now read through the repo's `.mailmap`, and commits sharing an email,
+  or a name up to case, count once. Different names with different emails and no `.mailmap`
+  line joining them still count separately
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to
