@@ -108,6 +108,18 @@ func handleCall(req request, sources func(string) []string) {
 	}
 	json.Unmarshal(req.Params, &p)
 
+	// sources walks under the project's warpmap.json and the command line stops
+	// the process on a malformed one, which here would end the whole session, so
+	// the file is checked first and its error answered as this call's result.
+	cfg, err := config.Load(p.Args.Dir)
+	if err != nil {
+		reply(req.ID, map[string]any{
+			"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("%s: %v", config.FileName, err)}},
+			"isError": true,
+		})
+		return
+	}
+
 	var text string
 	switch p.Name {
 	case "hotspots":
@@ -146,11 +158,6 @@ func handleCall(req request, sources func(string) []string) {
 			break
 		}
 		g := graph.Build(sources(p.Args.Dir))
-		cfg, err := config.Load(p.Args.Dir)
-		if err != nil {
-			text = fmt.Sprintf("%s: %v", config.FileName, err)
-			break
-		}
 		var b strings.Builder
 		risk.Assess(p.Args.Dir, g, p.Args.Files, cfg.Thresholds.Blast).Write(&b)
 		text = b.String()

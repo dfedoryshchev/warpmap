@@ -400,7 +400,8 @@ four things worth knowing before wiring it up:
   slashes on every platform, however `dir` was spelled. that is exactly what `trace` wants as
   its `file` and `risk` wants in its `files` with the same `dir`, so the tools compose.
 - `warpmap.json` is read from the analysed directory, so a project's `ignore` globs apply to
-  what the server reports.
+  what the server reports. a malformed one fails that call alone: the reply carries the parse
+  error as its text with `isError` set, and the server goes on answering.
 - churn comes from `git log` over the last 6 months, so a directory with no history in that
   window is ranked by complexity alone, the same caveat as the first audit above. the line
   counting the window's commits goes to the server's stderr, never into the tool's text.

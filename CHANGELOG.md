@@ -105,6 +105,9 @@ All notable changes to this project are documented in this file.
   factor of 1. Authors are now read through the repo's `.mailmap`, and commits sharing an email,
   or a name up to case, count once. Different names with different emails and no `.mailmap`
   line joining them still count separately
+- A `tools/call` on a directory whose `warpmap.json` is malformed ended the MCP server, so the
+  client lost the session and got no reply to that call or any later one. The call is now
+  answered with the error as its text and `isError` set, and the server keeps running
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

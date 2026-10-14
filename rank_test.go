@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/dfedoryshchev/warpmap/internal/mcp"
 )
 
 // a lizard installed on the machine running the tests would otherwise answer
@@ -18,6 +20,10 @@ import (
 func TestMain(m *testing.M) {
 	if spec, ok := os.LookupEnv("WARPMAP_FAKE_LIZARD"); ok {
 		os.Exit(fakeLizard(os.Args[1:], spec))
+	}
+	if _, ok := os.LookupEnv("WARPMAP_SERVE_MCP"); ok {
+		mcp.Serve(version, sourceFiles)
+		os.Exit(0)
 	}
 	var keep []string
 	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
