@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -12,8 +13,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dfedoryshchev/warpmap/internal/baseline"
 	"github.com/dfedoryshchev/warpmap/internal/config"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
+	"github.com/dfedoryshchev/warpmap/internal/report"
 )
 
 // every command prints the same file the same way. half of them used to print
@@ -598,6 +601,87 @@ func TestOwnershipCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
 	if got := run(filepath.Base(dir)); !slices.Equal(got, want) {
 		t.Fatalf("ownership <relative> printed %q, want %q", got, want)
 	}
+}
+
+func TestGodListsOnlyFilesAtTheThresholdUnlessAskedForAll(t *testing.T) {
+	dir := chainProject(t)
+	out, code := captureStdout(t, func() int { return godCmd([]string{dir}) })
+	if code != 0 {
+		t.Fatalf("god exited %d", code)
+	}
+	if n := godRows(out); n != 0 {
+		t.Fatalf("god listed %d files on a project where none reaches %d, output:\n%s", n, graph.GodThreshold, out)
+	}
+	out, code = captureStdout(t, func() int { return godCmd([]string{dir, "--all"}) })
+	if code != 0 {
+		t.Fatalf("god --all exited %d", code)
+	}
+	if n := godRows(out); n != 3 {
+		t.Fatalf("god --all listed %d files, want all 3:\n%s", n, out)
+	}
+}
+
+// god, the report's finding and the baseline's count are three readers of one
+// definition; a hub one importer short of the threshold has to be a god module
+// to none of them, and one more importer has to make it one to all three.
+func TestGodReportAndBaselineAgreeOnWhatAGodModuleIs(t *testing.T) {
+	for _, importers := range []int{graph.GodThreshold - 1, graph.GodThreshold} {
+		dir := hubProject(t, importers)
+		files := sourceFiles(dir)
+		want := 0
+		if importers >= graph.GodThreshold {
+			want = 1
+		}
+
+		out, code := captureStdout(t, func() int { return godCmd([]string{dir}) })
+		if code != 0 {
+			t.Fatalf("god exited %d", code)
+		}
+		if n := godRows(out); n != want {
+			t.Fatalf("%d importers: god listed %d files, want %d, output:\n%s", importers, n, want, out)
+		}
+
+		found := 0
+		for _, f := range report.Findings(graph.Build(files), dir) {
+			if f.Kind == "god-module" {
+				found++
+			}
+		}
+		if found != want {
+			t.Fatalf("%d importers: report has %d god-module findings, want %d", importers, found, want)
+		}
+
+		if n := baseline.Capture(dir, files).GodModules; n != want {
+			t.Fatalf("%d importers: baseline counts %d god modules, want %d", importers, n, want)
+		}
+	}
+}
+
+// hubProject writes hub.ts and n files that each import it, so hub.ts has a
+// fan-in of exactly n and every other file a fan-out of 1.
+func hubProject(t *testing.T, n int) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hub.ts"), []byte("export const hub = 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		src := fmt.Sprintf("import { hub } from \"./hub\";\nexport const u%d = hub;\n", i)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("u%d.ts", i)), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func godRows(out string) int {
+	n := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "in=") {
+			n++
+		}
+	}
+	return n
 }
 
 // chainProject writes a three-file import chain: a.ts -> b.ts -> c.ts. it gives

@@ -42,7 +42,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  trace <dir> <file>     blast radius of a file (--depth)")
 	fmt.Fprintln(w, "  dead <dir>             files nothing imports")
 	fmt.Fprintln(w, "  cycles <dir>           import cycles")
-	fmt.Fprintln(w, "  god <dir>              files with high fan-in/out")
+	fmt.Fprintln(w, "  god <dir>              files with fan-in + fan-out of 20 or more (--all)")
 	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
 	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
 	fmt.Fprintln(w, "  report <dir>           full audit, markdown or --json (-o file)")
@@ -454,17 +454,31 @@ func cyclesCmd(args []string) int {
 func godCmd(args []string) int {
 	fset := flag.NewFlagSet("god", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
+	all := fset.Bool("all", false, "rank every file with an import edge, not only the god modules")
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap god <dir>")
 		return 2
 	}
 	mods := graph.GodModules(graph.Build(sourceFiles(dir)))
+	if *all {
+		fmt.Println("files too many things depend on, or that depend on too much:")
+	} else {
+		n := 0
+		for n < len(mods) && mods[n].IsGod() {
+			n++
+		}
+		mods = mods[:n]
+		if n == 0 {
+			fmt.Printf("no file has fan-in + fan-out of %d or more; --all ranks them anyway\n", graph.GodThreshold)
+			return 0
+		}
+		fmt.Printf("god modules, fan-in + fan-out of %d or more:\n", graph.GodThreshold)
+	}
 	limit := *top
 	if limit > len(mods) {
 		limit = len(mods)
 	}
-	fmt.Println("files too many things depend on, or that depend on too much:")
 	for _, m := range mods[:limit] {
 		fmt.Printf("  in=%-3d out=%-3d %s\n", m.FanIn, m.FanOut, rel(dir, m.File))
 	}

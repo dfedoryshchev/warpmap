@@ -161,7 +161,10 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz)
 - `hotspots <dir>` - the files that change often AND are complex; start here
 - `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
-- `dead` / `cycles` / `god` - orphans, import cycles, over-central modules
+- `dead` / `cycles` - orphans, import cycles
+- `god <dir>` - over-central modules: files whose fan-in + fan-out is 20 or more, the same line
+  the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
+  with an import edge
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page
 

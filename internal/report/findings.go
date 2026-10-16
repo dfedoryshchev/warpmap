@@ -34,7 +34,7 @@ func relPath(dir, f string) string {
 func Findings(g graph.Graph, dir string) []Finding {
 	var fs []Finding
 	for _, m := range graph.GodModules(g) {
-		if m.FanIn+m.FanOut < 20 {
+		if !m.IsGod() {
 			break
 		}
 		fs = append(fs, Finding{

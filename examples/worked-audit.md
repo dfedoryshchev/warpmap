@@ -151,7 +151,7 @@ $ warpmap cycles .
 ```
 
 ```
-$ warpmap god . -n 5
+$ warpmap god . --all -n 5
 files too many things depend on, or that depend on too much:
   in=11  out=5   src/field/index.ts
   in=1   out=14  src/validation/index.ts
@@ -166,6 +166,10 @@ looks like from the graph; they are central by design. the row worth a second lo
 so it is a leaf the whole project leans on. note that its fan-in of 14 and the 32 that `trace`
 returns for it are answers to different questions: direct importers against everything
 transitively downstream.
+
+`--all` because no file here reaches a fan-in + fan-out of 20, the line where `god`, the report
+and the ratchet start calling a file a god module; without it `god` says that and lists nothing,
+which is also why the report below has no god-module finding.
 
 ## the whole audit in one file
 

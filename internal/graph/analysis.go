@@ -92,6 +92,12 @@ type Module struct {
 	FanOut int
 }
 
+// GodThreshold is the fan-in + fan-out at which a file counts as a god module.
+const GodThreshold = 20
+
+// IsGod reports whether m is central enough to count as a god module.
+func (m Module) IsGod() bool { return m.FanIn+m.FanOut >= GodThreshold }
+
 // GodModules ranks files by fan-in + fan-out: too many things depend on it, or it
 // depends on too much. high scores are architectural risk - a change there is hard
 // to reason about because it touches (or is touched by) half the codebase.

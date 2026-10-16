@@ -41,6 +41,10 @@ All notable changes to this project are documented in this file.
   so on a Go or C# repository the ranking was a stray config file or nothing. The import graph
   and the commands built on it still read only TypeScript, JavaScript and Python, and `_test.go`
   files count as tests
+- `god` lists only files whose fan-in + fan-out is 20 or more, the line the report's god-module
+  finding and the `baseline` / `diff` count already used, and says so when no file reaches it.
+  It ranked every file before, so it could name a god module the report and the ratchet did not
+  count. `--all` gives the old ranking
 
 ### Fixed
 - `trace` and `risk` accepted a file that is not in the graph: `risk . missing.ts` printed

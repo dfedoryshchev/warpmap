@@ -42,3 +42,19 @@ func TestGodModules(t *testing.T) {
 		t.Fatal("expected fan-in/out to rank some modules")
 	}
 }
+
+func TestIsGodCountsFanInAndFanOutTogetherFromTheThreshold(t *testing.T) {
+	for _, c := range []struct {
+		m    Module
+		want bool
+	}{
+		{Module{FanIn: GodThreshold - 1}, false},
+		{Module{FanIn: GodThreshold}, true},
+		{Module{FanIn: 12, FanOut: GodThreshold - 12}, true},
+		{Module{FanOut: GodThreshold - 1}, false},
+	} {
+		if got := c.m.IsGod(); got != c.want {
+			t.Fatalf("in=%d out=%d: IsGod() = %v, want %v", c.m.FanIn, c.m.FanOut, got, c.want)
+		}
+	}
+}

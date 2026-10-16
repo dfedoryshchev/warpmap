@@ -24,7 +24,7 @@ type Snapshot struct {
 func godCount(g graph.Graph) int {
 	n := 0
 	for _, m := range graph.GodModules(g) {
-		if m.FanIn+m.FanOut >= 20 {
+		if m.IsGod() {
 			n++
 		}
 	}
