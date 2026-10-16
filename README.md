@@ -160,7 +160,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 **understand**
 - `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz)
 - `hotspots <dir>` - the files that change often AND are complex; start here
-- `trace <dir> <file>` - blast radius: everything that depends on a file
+- `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
 - `dead` / `cycles` / `god` - orphans, import cycles, over-central modules
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page
@@ -168,7 +168,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state
 - `diff <dir>` - did the change make the codebase better or worse? exits non-zero on regression
-- `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change
+- `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them
 
 **work with agents**
@@ -388,7 +388,8 @@ spaces, then how many files depend on it. `risk` takes the files a change is abo
 `files`, a list of paths relative to `dir`, and answers with exactly the text `warpmap risk`
 prints: a line per file with its blast radius and whether a test imports it, the combined blast
 radius, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
-where the command exits 1 on a risky change, the tool says so only in the verdict line.
+where the command exits 1 on a risky change, the tool says so only in the verdict line. a path
+the graph does not hold comes back as an error result naming it, from `trace` and `risk` alike.
 `warpmap brief <dir> <file>` still packs the hotspot rank and the ownership count alongside the
 blast radius, so an agent that can also run a command gets more than the tools carry.
 

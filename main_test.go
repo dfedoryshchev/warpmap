@@ -507,6 +507,50 @@ func TestRiskFailsOnAnUntestedChangePastTheThreshold(t *testing.T) {
 	}
 }
 
+func TestTraceAndRiskRefuseAFileThatIsNotInTheGraph(t *testing.T) {
+	dir := chainProject(t)
+	run := map[string]func() int{
+		"trace": func() int { return traceCmd([]string{dir, "src/missing.ts"}) },
+		"risk":  func() int { return riskCmd([]string{dir, "src/c.ts", "src/missing.ts"}) },
+	}
+	for name, fn := range run {
+		var stdout string
+		stderr, code := capture(t, &os.Stderr, func() int {
+			var c int
+			stdout, c = captureStdout(t, fn)
+			return c
+		})
+		if code != 2 {
+			t.Errorf("%s on a missing file exited %d, want 2", name, code)
+		}
+		if stdout != "" {
+			t.Errorf("%s on a missing file printed a result:\n%s", name, stdout)
+		}
+		if want := "src/missing.ts is not in the graph"; !strings.Contains(stderr, want) {
+			t.Errorf("%s stderr = %q, want it to name %q", name, stderr, want)
+		}
+	}
+}
+
+func TestRiskSkipMissingAssessesTheRestAndNamesWhatItLeftOut(t *testing.T) {
+	dir := chainProject(t)
+	var stdout string
+	stderr, code := capture(t, &os.Stderr, func() int {
+		var c int
+		stdout, c = captureStdout(t, func() int {
+			return riskCmd([]string{"--skip-missing", dir, "src/c.ts", "src/missing.ts"})
+		})
+		return c
+	})
+	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\nverdict: manageable\n"
+	if code != 0 || stdout != want {
+		t.Fatalf("risk --skip-missing exited %d and printed\n%swant 0 and\n%s", code, stdout, want)
+	}
+	if !strings.Contains(stderr, "src/missing.ts is not in the graph, not assessed") {
+		t.Fatalf("stderr = %q, want it to name the skipped file", stderr)
+	}
+}
+
 // git reads the path it is given from inside the project, so a project named
 // relative to where the caller stands used to match no history at all and
 // every file printed `authors=0`.

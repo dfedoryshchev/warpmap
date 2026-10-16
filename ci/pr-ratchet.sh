@@ -93,7 +93,9 @@ esac
 
 # only files that still exist can be traced, so deletions are dropped along with everything the
 # graph does not read. paths come out relative to the repository root and warpmap wants them
-# relative to the analysed directory.
+# relative to the analysed directory. a changed file can still be outside the walk (an ignore glob,
+# dist, a gitignored path), which is why risk runs with --skip-missing: it names those files in the
+# report instead of failing the job.
 files=()
 while IFS= read -r p; do
 	case "$p" in
@@ -112,7 +114,7 @@ done < <(git diff --name-only --diff-filter=ACMR "$base" HEAD)
 
 risk_state="skipped"
 if [ "${#files[@]}" -gt 0 ]; then
-	"$bin" risk "$target" "${files[@]}" >"$work/risk.txt" 2>&1
+	"$bin" risk --skip-missing "$target" "${files[@]}" >"$work/risk.txt" 2>&1
 	case $? in
 	0) risk_state="manageable" ;;
 	1) risk_state="risky" ;;

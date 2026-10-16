@@ -393,12 +393,28 @@ func traceCmd(args []string) int {
 	}
 	target := filepath.Join(dir, file)
 	g := graph.Build(sourceFiles(dir))
+	if code := refuseMissing(g, dir, file); code != 0 {
+		return code
+	}
 	affected := trace.BlastRadius(g, target, *depth)
 	fmt.Printf("%d files depend on %s\n", len(affected), file)
 	for _, f := range affected {
 		fmt.Printf("  %s\n", rel(dir, f))
 	}
 	return 0
+}
+
+// refuseMissing exits non-zero for a file the graph does not hold: a mistyped or
+// renamed path has no dependents, which reads as a safe change.
+func refuseMissing(g graph.Graph, dir string, files ...string) int {
+	missing := g.Missing(dir, files)
+	if len(missing) == 0 {
+		return 0
+	}
+	for _, f := range missing {
+		fmt.Fprintf(os.Stderr, "%s is not in the graph of %s\n", f, dir)
+	}
+	return 2
 }
 
 func deadCmd(args []string) int {
@@ -552,6 +568,7 @@ func explainCmd(args []string) int {
 
 func riskCmd(args []string) int {
 	fset := flag.NewFlagSet("risk", flag.ExitOnError)
+	skipMissing := fset.Bool("skip-missing", false, "assess the files the graph holds and name the rest instead of failing")
 	rest := parseArgs(fset, args)
 	if len(rest) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: warpmap risk <dir> <file>...  (the files you are about to change)")
@@ -559,7 +576,21 @@ func riskCmd(args []string) int {
 	}
 	dir, changed := rest[0], rest[1:]
 	blastLimit := loadConfig(dir).Thresholds.Blast
-	a := risk.Assess(dir, graph.Build(sourceFiles(dir)), changed, blastLimit)
+	g := graph.Build(sourceFiles(dir))
+	if *skipMissing {
+		var kept []string
+		for _, f := range changed {
+			if len(g.Missing(dir, []string{f})) > 0 {
+				fmt.Fprintf(os.Stderr, "%s is not in the graph, not assessed\n", f)
+				continue
+			}
+			kept = append(kept, f)
+		}
+		changed = kept
+	} else if code := refuseMissing(g, dir, changed...); code != 0 {
+		return code
+	}
+	a := risk.Assess(dir, g, changed, blastLimit)
 	a.Write(os.Stdout)
 	if a.Risky > 0 {
 		return 1

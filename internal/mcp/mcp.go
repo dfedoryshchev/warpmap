@@ -97,6 +97,14 @@ func projectPath(dir, f string) string {
 	return filepath.ToSlash(r)
 }
 
+func replyMissing(id json.RawMessage, missing []string) {
+	text := strings.Join(missing, ", ") + " is not in the graph"
+	reply(id, map[string]any{
+		"content": []map[string]any{{"type": "text", "text": text}},
+		"isError": true,
+	})
+}
+
 func handleCall(req request, sources func(string) []string) {
 	var p struct {
 		Name string `json:"name"`
@@ -135,6 +143,10 @@ func handleCall(req request, sources func(string) []string) {
 		}
 	case "trace":
 		g := graph.Build(sources(p.Args.Dir))
+		if missing := g.Missing(p.Args.Dir, []string{p.Args.File}); len(missing) > 0 {
+			replyMissing(req.ID, missing)
+			return
+		}
 		br := trace.BlastRadius(g, filepath.Join(p.Args.Dir, p.Args.File), 0)
 		text = fmt.Sprintf("%d files depend on %s\n", len(br), p.Args.File)
 		deps := make([]string, 0, len(br))
@@ -158,6 +170,10 @@ func handleCall(req request, sources func(string) []string) {
 			break
 		}
 		g := graph.Build(sources(p.Args.Dir))
+		if missing := g.Missing(p.Args.Dir, p.Args.Files); len(missing) > 0 {
+			replyMissing(req.ID, missing)
+			return
+		}
 		var b strings.Builder
 		risk.Assess(p.Args.Dir, g, p.Args.Files, cfg.Thresholds.Blast).Write(&b)
 		text = b.String()

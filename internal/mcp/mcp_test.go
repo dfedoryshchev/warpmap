@@ -138,7 +138,29 @@ func TestRiskToolGivesTheVerdictUnderTheProjectThreshold(t *testing.T) {
 	}
 }
 
+func TestTraceAndRiskToolsAnswerAnErrorForAFileThatIsNotInTheGraph(t *testing.T) {
+	dir := chain(t)
+	for tool, args := range map[string]map[string]any{
+		"trace": {"dir": dir, "file": "src/missing.ts"},
+		"risk":  {"dir": dir, "files": []string{"src/c.ts", "src/missing.ts"}},
+	} {
+		text, isError := callResult(t, tool, args)
+		if !isError {
+			t.Errorf("%s on a missing file was not an error: %q", tool, text)
+		}
+		if want := "src/missing.ts is not in the graph"; !strings.Contains(text, want) {
+			t.Errorf("%s text = %q, want it to name %q", tool, text, want)
+		}
+	}
+}
+
 func callText(t *testing.T, tool string, args map[string]any) string {
+	t.Helper()
+	text, _ := callResult(t, tool, args)
+	return text
+}
+
+func callResult(t *testing.T, tool string, args map[string]any) (string, bool) {
 	t.Helper()
 	params, _ := json.Marshal(map[string]any{"name": tool, "arguments": args})
 	r, w, err := os.Pipe()
@@ -156,12 +178,13 @@ func callText(t *testing.T, tool string, args map[string]any) string {
 			Content []struct {
 				Text string `json:"text"`
 			} `json:"content"`
+			IsError bool `json:"isError"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil || len(resp.Result.Content) != 1 {
 		t.Fatalf("reply %q: %v", raw, err)
 	}
-	return resp.Result.Content[0].Text
+	return resp.Result.Content[0].Text, resp.Result.IsError
 }
 
 func TestHotspotsToolPrintsPathThenScore(t *testing.T) {

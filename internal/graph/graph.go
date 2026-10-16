@@ -18,6 +18,22 @@ type Graph struct {
 	Edges []Edge
 }
 
+// Missing returns the given files, each relative to dir and named as the caller
+// named it, that the graph does not hold.
+func (g Graph) Missing(dir string, files []string) []string {
+	have := make(map[string]bool, len(g.Files))
+	for _, f := range g.Files {
+		have[filepath.Clean(f)] = true
+	}
+	var out []string
+	for _, f := range files {
+		if !have[filepath.Join(dir, f)] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // --- ts / js ---
 
 // matches: import ... from "spec" | export ... from "spec" | require("spec") |

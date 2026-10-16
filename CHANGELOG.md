@@ -43,6 +43,12 @@ All notable changes to this project are documented in this file.
   files count as tests
 
 ### Fixed
+- `trace` and `risk` accepted a file that is not in the graph: `risk . missing.ts` printed
+  `blast=0`, `verdict: manageable` and exited 0, so a mistyped or renamed path passed the
+  check. Both now name the file on stderr and exit 2, and the MCP `trace` and `risk` tools
+  answer an error result. `risk --skip-missing` assesses the files the graph holds and names
+  the others on stderr; the GitHub Action passes it, so a pull request that changes a file under
+  an ignored path is not failed by it
 - `hotspots`, `trace`, `dead`, `cycles` and `god` printed files as walked (`..\proj\src\a.ts` on
   windows) while `testgap` printed them relative to the project; they now name a file relative
   to the project, with forward slashes
