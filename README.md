@@ -419,6 +419,10 @@ the runner i use is [agentweft](https://github.com/dfedoryshchev/agentweft), whi
 server as a subprocess and speaks the same line-delimited JSON-RPC. nothing above is specific to
 it: the surface is four tools over stdio, and any MCP client can drive it.
 
+an agent that runs `risk` before an edit and, on a risky verdict, parks the change for a person
+with warpmap's output as the reason, from the command line and over MCP, is in
+[examples/agent-parks-a-hot-edit.md](examples/agent-parks-a-hot-edit.md).
+
 ## what talks to the network
 
 one command, so start with it. the binary links `net/http` and carries an api endpoint as a
