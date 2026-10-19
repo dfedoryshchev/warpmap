@@ -21,6 +21,9 @@ func TestMain(m *testing.M) {
 	if spec, ok := os.LookupEnv("WARPMAP_FAKE_LIZARD"); ok {
 		os.Exit(fakeLizard(os.Args[1:], spec))
 	}
+	if s, ok := os.LookupEnv("WARPMAP_FAKE_SEED"); ok {
+		os.Exit(fakeTool(os.Args, s))
+	}
 	if _, ok := os.LookupEnv("WARPMAP_SERVE_MCP"); ok {
 		mcp.Serve(version, sourceFiles)
 		os.Exit(0)

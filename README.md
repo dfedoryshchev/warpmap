@@ -167,6 +167,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
   with an import edge
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page
+- `collect <dir> -o <folder>` - the analysis in one folder, with no line of your source in it,
+  for you to read before you send it to anyone
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state
@@ -223,6 +225,65 @@ two of them diff.
 
 `warpmap dashboard . -o dashboard.html` writes the page to a file instead of stdout, the same
 way `report` does.
+
+## the evidence in one folder
+
+when someone else is going to read the numbers, run the analysis on your own machine and hand
+over the result, not the code:
+
+```
+$ warpmap collect . -o evidence
+```
+
+`collect` writes one folder and stops. it sends nothing anywhere; reading the folder and sending
+it on is yours to do. it writes only into a new or empty folder, and a missing tool never stops
+it. this is everything that can be in it:
+
+- `report.json` - what `warpmap report --json` prints.
+- `analyze.json` - what `warpmap analyze --json` prints: every file in the import graph and
+  every edge between two of them.
+- `tools.txt` - `warpmap <version>` first, then a line each for gitleaks, lizard and jscpd: the
+  first line its own version command printed, `absent` when it is not on your `PATH`, and
+  `, run failed` after the version when it was found but did not finish. the reason goes to
+  stderr, not into the folder.
+- `gitleaks.json`, when [gitleaks](https://github.com/gitleaks/gitleaks) is on your `PATH`:
+  `gitleaks detect --redact` over the directory - its git history inside a repo, the files on
+  disk outside one. each finding keeps the rule and its description, the file, the line and
+  column span, the commit and its date, the entropy, the tags and the fingerprint. the rest is
+  left out: `--redact` masks the secret but keeps the text around it in `Match`, and a finding
+  also carries the commit's author, email and message.
+- `lizard.csv`, when lizard is on your `PATH`: a row per function with its lines of code,
+  cyclomatic complexity, tokens, parameter count, length, file, name, and first and last line.
+  lizard's full signature column is left out, because it spells out parameter names and default
+  values; the bare function name stays.
+- `jscpd.json`, when [jscpd](https://github.com/kucherenko/jscpd) is on your `PATH`: each
+  duplicated block as its format and kind, its line and token counts, and the two files with the
+  lines it spans in each, plus the totals. jscpd's own report carries the duplicated code itself
+  (`fragment`) and, with blame on, who wrote it; both are left out.
+
+the optional tools' output is filtered by what to keep, not by what to drop: named fields for
+gitleaks and lizard, and for jscpd the named text fields plus any number. so a text field a
+later version adds stays out of the folder until warpmap is changed to keep it.
+
+what the folder does name: paths relative to the project, the function names lizard reports,
+commit hashes and gitleaks' rule names. what it does not hold is a line of your source. a test
+holds that line: it seeds one string into every line of a small project, in a comment, a string
+literal and a default argument, runs `collect` with stand-ins for the three tools that echo the
+string in every field where the real tools put source text or a person's name, and fails if it
+turns up in any file of the folder:
+
+```
+$ go test -run TestCollect .
+```
+
+to check a folder yourself, every file in it is plain text. take a line you know is in the code,
+a comment or an unusual string, and search for it:
+
+```
+$ grep -r "a line from your code" evidence/
+```
+
+nothing should come back, short of a line that is only a path or a function name.
 
 ## configuration (optional)
 
@@ -440,11 +501,12 @@ links a network stack, directly or transitively, and a test holds that line:
 comes from `git ls-files` (and `git check-ignore`, to tell an ignored folder from an empty one)
 and history from `git log`, each run as a local subprocess in the directory you pointed at or a
 repo found under it, and `hotspots` and `ownership` also start `lizard --csv` when lizard is on
-your `PATH`.
+your `PATH`. `collect` starts `gitleaks`, `lizard` and `jscpd`, each only when it is on your
+`PATH`.
 
 two limits worth knowing. the test is about what warpmap links, not what a subprocess does:
-warpmap starts `git`, and `lizard` when it finds one, and nothing else, and what those do from
-there is outside it. and
+warpmap starts `git`, the optional tools above when it finds them, and nothing else, and what
+those do from there is outside it. and
 the github action is a separate script, `ci/pr-ratchet.sh`, that runs on your runner: it calls
 the github api with `curl` to write the pull request comment, and runs `git fetch` for the base
 commit when the checkout does not already have it.

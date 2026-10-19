@@ -32,6 +32,12 @@ All notable changes to this project are documented in this file.
   warns under 20, where churn differences are mostly noise, or when it ranked by complexity
   alone. `--months` sets the window, 6 by default. The MCP tool text is unchanged; the line goes
   to the server's stderr
+- `collect <dir> -o <folder>`: the analysis written to one new or empty folder for the person who
+  ran it to read and send on: `report.json` and `analyze.json` (what `report --json` and
+  `analyze --json` print), `tools.txt` (each tool's version, or `absent`), and the findings of
+  gitleaks (`--redact`), lizard and jscpd when they are on `PATH`. Those three keep only listed
+  fields: no matched text, duplicated code, signature, author, email or commit message goes in.
+  A missing tool is listed, never fatal, and nothing is sent anywhere
 
 ### Changed
 - `brief` lists the dependents it shows in alphabetical order, and its label says how many of

@@ -47,6 +47,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
 	fmt.Fprintln(w, "  report <dir>           full audit, markdown or --json (-o file)")
 	fmt.Fprintln(w, "  dashboard <dir>        hotspot treemap as one html page (-o file)")
+	fmt.Fprintln(w, "  collect <dir> -o <f>   the evidence in one folder you read before sending")
 	fmt.Fprintln(w, "  baseline <dir>         save a snapshot for later comparison")
 	fmt.Fprintln(w, "  diff <dir>             ratchet: better or worse since the baseline")
 	fmt.Fprintln(w, "  risk <dir> <file>...   blast radius + test gaps for a change")
@@ -358,6 +359,12 @@ func relGraph(dir string, g graph.Graph) graph.Graph {
 	return out
 }
 
+func writeGraphJSON(w io.Writer, dir string, g graph.Graph) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(relGraph(dir, g))
+}
+
 func analyzeCmd(args []string) int {
 	fset := flag.NewFlagSet("analyze", flag.ExitOnError)
 	asJSON := fset.Bool("json", false, "print the full graph as json")
@@ -370,9 +377,7 @@ func analyzeCmd(args []string) int {
 	g := graph.Build(sourceFiles(dir))
 	switch {
 	case *asJSON:
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		enc.Encode(relGraph(dir, g))
+		writeGraphJSON(os.Stdout, dir, g)
 	case *asDot:
 		fmt.Print(graph.ToDot(relGraph(dir, g)))
 	default:
@@ -798,6 +803,8 @@ func main() {
 		os.Exit(reportCmd(os.Args[2:]))
 	case "dashboard":
 		os.Exit(dashboardCmd(os.Args[2:]))
+	case "collect":
+		os.Exit(collectCmd(os.Args[2:]))
 	case "baseline":
 		os.Exit(baselineCmd(os.Args[2:]))
 	case "diff":

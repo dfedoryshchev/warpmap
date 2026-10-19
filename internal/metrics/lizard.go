@@ -27,29 +27,9 @@ func LizardComplexity(bin string, files []string) (map[string]int, error) {
 		byName[filepath.Clean(f)] = f
 	}
 
-	list, err := os.CreateTemp("", "warpmap-lizard-*.txt")
+	out, err := LizardCSV(bin, files)
 	if err != nil {
 		return nil, err
-	}
-	defer os.Remove(list.Name())
-	_, err = io.WriteString(list, strings.Join(files, "\n")+"\n")
-	if cerr := list.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	cmd := exec.Command(bin, "--csv", "-f", list.Name())
-	// lizard reads the list and prints file names in the platform's default text
-	// encoding, which on windows is not utf-8: a non-ascii path would come back
-	// spelled differently and match nothing.
-	cmd.Env = append(os.Environ(), "PYTHONUTF8=1")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
 	r := csv.NewReader(bytes.NewReader(out))
@@ -84,6 +64,36 @@ func LizardComplexity(bin string, files []string) (map[string]int, error) {
 		return nil, errors.New("lizard named none of the files it was given")
 	}
 	return cx, nil
+}
+
+// LizardCSV runs the lizard executable at bin over files and returns what it
+// prints for `--csv`, one row per function, unparsed.
+func LizardCSV(bin string, files []string) ([]byte, error) {
+	list, err := os.CreateTemp("", "warpmap-lizard-*.txt")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(list.Name())
+	_, err = io.WriteString(list, strings.Join(files, "\n")+"\n")
+	if cerr := list.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(bin, "--csv", "-f", list.Name())
+	// lizard reads the list and prints file names in the platform's default text
+	// encoding, which on windows is not utf-8: a non-ascii path would come back
+	// spelled differently and match nothing.
+	cmd.Env = append(os.Environ(), "PYTHONUTF8=1")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
 }
 
 // LizardHotspots is Hotspots with each file's complexity taken from the lizard
