@@ -53,6 +53,11 @@ All notable changes to this project are documented in this file.
   finding and the `baseline` / `diff` count already used, and says so when no file reaches it.
   It ranked every file before, so it could name a god module the report and the ratchet did not
   count. `--all` gives the old ranking
+- `report`'s cycle and dead-code findings gave a count alone, so acting on one meant running
+  `cycles` or `dead` by hand. Each finding's detail now names its files, relative to the project:
+  the cycle in import order, the dead code in path order, the first ten and then `and <n> more`.
+  `report --json` carries the same detail plus a `files` list on every finding, god modules
+  included, that holds every file
 
 ### Fixed
 - `trace` and `risk` accepted a file that is not in the graph: `risk . missing.ts` printed

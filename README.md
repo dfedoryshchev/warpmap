@@ -113,20 +113,17 @@ findings, the same ranking - for a reader that is a program. `-o` writes it to a
 it does for markdown.
 
 ```
-$ warpmap report . --json | head -12
+$ warpmap report . --json | head -4
 {
   "files": 8,
   "edges": 7,
   "findings": [
-    {
-      "severity": "low",
-      "kind": "dead-code",
-      "detail": "1 files nothing imports",
-      "recommendation": "confirm they are entry points, or delete them"
-    }
-  ],
-  "hotspots": [
 ```
+
+each finding carries its `severity`, `kind`, `detail` and `recommendation`, and `files`: every
+file behind it, the god module itself, the files on the import cycle in the order they import
+each other, or the files nothing imports. the `detail` names them too, in both formats, and stops
+after ten with `and <n> more`; `files` always holds the whole list.
 
 each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
 markdown table prints. files are named relative to the project you pointed at, exactly as

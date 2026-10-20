@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -19,10 +20,11 @@ type decoded struct {
 	Files    int `json:"files"`
 	Edges    int `json:"edges"`
 	Findings []struct {
-		Severity       string `json:"severity"`
-		Kind           string `json:"kind"`
-		Detail         string `json:"detail"`
-		Recommendation string `json:"recommendation"`
+		Severity       string   `json:"severity"`
+		Kind           string   `json:"kind"`
+		Detail         string   `json:"detail"`
+		Recommendation string   `json:"recommendation"`
+		Files          []string `json:"files"`
 	} `json:"findings"`
 	Hotspots []struct {
 		File       string  `json:"file"`
@@ -116,6 +118,68 @@ func TestJSONNamesFilesRelativeToTheProject(t *testing.T) {
 		if strings.Contains(h.File, "\\") || strings.HasPrefix(h.File, "/") || !strings.HasPrefix(h.File, "src/") {
 			t.Fatalf("hotspot file %q is not a slashed project-relative path", h.File)
 		}
+	}
+}
+
+// a finding a reader cannot act on without re-running another command is a
+// count, not a finding: each one has to name the files behind it, in the
+// document and in the pack.
+func TestEveryFindingNamesItsFiles(t *testing.T) {
+	dir := auditProject(t)
+	r := Build(dir, sources(t, dir), metrics.Churn{})
+	raw, err := r.JSON()
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	var got decoded
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	md := r.Markdown()
+
+	byKind := map[string][]string{}
+	for _, f := range got.Findings {
+		if len(f.Files) == 0 {
+			t.Fatalf("the %s finding names no files: %+v", f.Kind, f)
+		}
+		for _, p := range f.Files {
+			if strings.Contains(p, "\\") || strings.HasPrefix(p, "/") || !strings.HasPrefix(p, "src/") {
+				t.Fatalf("%s names %q, not a slashed project-relative path", f.Kind, p)
+			}
+		}
+		shown := f.Files
+		if len(shown) > namedFiles {
+			shown = shown[:namedFiles]
+			more := fmt.Sprintf("and %d more", len(f.Files)-namedFiles)
+			if !strings.HasSuffix(f.Detail, more) {
+				t.Fatalf("%s lists %d files and its detail does not end %q: %s", f.Kind, len(f.Files), more, f.Detail)
+			}
+		}
+		for _, p := range shown {
+			if !strings.Contains(f.Detail, p) {
+				t.Fatalf("the %s detail does not name %s: %s", f.Kind, p, f.Detail)
+			}
+		}
+		if len(f.Files) > namedFiles && strings.Contains(f.Detail, f.Files[namedFiles]) {
+			t.Fatalf("the %s detail names more than %d files: %s", f.Kind, namedFiles, f.Detail)
+		}
+		if !strings.Contains(md, f.Detail) {
+			t.Fatalf("the markdown does not carry the %s detail: %s", f.Kind, f.Detail)
+		}
+		byKind[f.Kind] = f.Files
+	}
+
+	if want := []string{"src/hub.ts"}; strings.Join(byKind["god-module"], ",") != strings.Join(want, ",") {
+		t.Fatalf("god-module names %v, want %v", byKind["god-module"], want)
+	}
+	cycle := append([]string{}, byKind["cycle"]...)
+	sort.Strings(cycle)
+	if strings.Join(cycle, ",") != "src/p.ts,src/q.ts" {
+		t.Fatalf("cycle names %v, want src/p.ts and src/q.ts", byKind["cycle"])
+	}
+	dead := byKind["dead-code"]
+	if len(dead) != 20 || dead[0] != "src/leaf00.ts" || dead[19] != "src/leaf19.ts" {
+		t.Fatalf("dead-code names %v, want the 20 leaves in order", dead)
 	}
 }
 
