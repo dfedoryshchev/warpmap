@@ -29,6 +29,46 @@ func TestResolveTsAliasThroughTsconfigPaths(t *testing.T) {
 	}
 }
 
+func aliasEdges(t *testing.T, files ...string) []Edge {
+	t.Helper()
+	return Build(files).Edges
+}
+
+func TestAliasEdgesSameFromPackageRootAndSubdirectory(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "tsconfig.json"), `{"compilerOptions":{"baseUrl":".","paths":{"@/*":["pkg/src/*"]}}}`)
+	writeFile(t, filepath.Join(root, "pkg", "src", "a.ts"), "export const a = 1;\n")
+	writeFile(t, filepath.Join(root, "pkg", "src", "b.ts"), `import { a } from "@/a";`+"\n")
+
+	t.Chdir(root)
+	fromRoot := aliasEdges(t, filepath.Join("pkg", "src", "a.ts"), filepath.Join("pkg", "src", "b.ts"))
+	if len(fromRoot) != 1 {
+		t.Fatalf("edges from the tsconfig directory = %v, want 1", fromRoot)
+	}
+
+	t.Chdir(filepath.Join(root, "pkg"))
+	fromPkg := aliasEdges(t, filepath.Join("src", "a.ts"), filepath.Join("src", "b.ts"))
+	want := Edge{From: filepath.Join("src", "b.ts"), To: filepath.Join("src", "a.ts")}
+	if len(fromPkg) != 1 || fromPkg[0] != want {
+		t.Fatalf("edges from a package below the tsconfig = %v, want [%v]", fromPkg, want)
+	}
+}
+
+func TestFindTsconfigStopsAtRepoRoot(t *testing.T) {
+	outer := t.TempDir()
+	writeFile(t, filepath.Join(outer, "tsconfig.json"), `{"compilerOptions":{"baseUrl":".","paths":{"@/*":["src/*"]}}}`)
+	writeFile(t, filepath.Join(outer, "src", "a.ts"), "export const a = 1;\n")
+	repo := filepath.Join(outer, "repo")
+	writeFile(t, filepath.Join(repo, ".git", "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(repo, "src", "a.ts"), "export const a = 1;\n")
+	from := filepath.Join(repo, "src", "b.ts")
+	writeFile(t, from, `import { a } from "@/a";`+"\n")
+
+	if got := resolveTs(from, "@/a"); got != "" {
+		t.Fatalf("resolveTs used a tsconfig above the repo root: %q", got)
+	}
+}
+
 func TestResolveTsJsSpecifierFindsTsSource(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "src", "helpers.ts"), "export const h = 1;\n")

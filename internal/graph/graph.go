@@ -63,7 +63,7 @@ func resolveTs(fromFile, spec string) string {
 		return resolveOnDisk(filepath.Join(filepath.Dir(fromFile), spec))
 	}
 	if tc := findTsconfig(filepath.Dir(fromFile)); tc != nil {
-		return resolveAlias(tc, spec)
+		return inCallerSpace(fromFile, resolveAlias(tc, spec))
 	}
 	return ""
 }

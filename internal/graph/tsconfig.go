@@ -24,15 +24,21 @@ type tsconfigFile struct {
 }
 
 // tsconfigDirCache maps a directory to the tsconfig covering it (found by
-// walking upward), or nil when none exists up to the filesystem root. Every
+// walking upward), or nil when none exists up to the repository root. Every
 // file under one project resolves through the same tsconfig.json, so caching
 // by directory avoids re-walking and re-parsing per file.
 var tsconfigDirCache = map[string]*tsconfig{}
 var tsconfigFileCache = map[string]*tsconfig{}
 
 // findTsconfig returns the tsconfig covering fromDir, or nil if none is
-// found walking upward to the filesystem root.
+// found walking upward to the repository root (the directory holding .git) or,
+// outside a repository, the filesystem root. The returned baseURL is absolute.
 func findTsconfig(fromDir string) *tsconfig {
+	// filepath.Dir of a relative path bottoms out at ".", so the climb has to
+	// run on the absolute path to see a tsconfig above the analysed directory.
+	if abs, err := filepath.Abs(fromDir); err == nil {
+		fromDir = abs
+	}
 	if tc, ok := tsconfigDirCache[fromDir]; ok {
 		return tc
 	}
@@ -52,7 +58,7 @@ func findTsconfig(fromDir string) *tsconfig {
 			break
 		}
 		parent := filepath.Dir(dir)
-		if parent == dir {
+		if parent == dir || exists(filepath.Join(dir, ".git")) {
 			break
 		}
 		dir = parent
@@ -61,6 +67,22 @@ func findTsconfig(fromDir string) *tsconfig {
 		tsconfigDirCache[v] = found
 	}
 	return found
+}
+
+// inCallerSpace spells an absolute resolved path the way fromFile was spelled,
+// so an edge's endpoints match the walked file names when those are relative.
+func inCallerSpace(fromFile, resolved string) string {
+	if resolved == "" || filepath.IsAbs(fromFile) {
+		return resolved
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return resolved
+	}
+	if rel, err := filepath.Rel(cwd, resolved); err == nil {
+		return rel
+	}
+	return resolved
 }
 
 // loadTsconfig reads path's compilerOptions.baseUrl and .paths. A tsconfig

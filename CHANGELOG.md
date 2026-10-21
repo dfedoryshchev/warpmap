@@ -60,6 +60,11 @@ All notable changes to this project are documented in this file.
   included, that holds every file
 
 ### Fixed
+- tsconfig `paths` aliases were dropped when warpmap ran from inside a package whose
+  `tsconfig.json` sits in a parent directory (`analyze .` from `packages/app`): the lookup never
+  went above the directory it was given. It now climbs to the repository root (the directory
+  holding `.git`), or the filesystem root outside a repository, so a package gives the same alias
+  edges from its root and from a subdirectory
 - `trace` and `risk` accepted a file that is not in the graph: `risk . missing.ts` printed
   `blast=0`, `verdict: manageable` and exited 0, so a mistyped or renamed path passed the
   check. Both now name the file on stderr and exit 2, and the MCP `trace` and `risk` tools
