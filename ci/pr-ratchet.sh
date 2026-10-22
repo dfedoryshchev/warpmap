@@ -60,7 +60,9 @@ tree="$work/tree"
 mkdir -p "$tree"
 
 # one tree, used twice. the base commit goes in first and gets snapshotted; then its sources are
-# swapped for the pull request's and the snapshot is compared against them in place. warpmap
+# swapped for the pull request's and the snapshot is compared against them in place. --force
+# because the base commit may carry a baseline.json the project committed, and the snapshot of
+# that commit's sources is the one wanted here, in a directory that is thrown away. warpmap
 # writes .warpmap/baseline.json itself and reads it back itself, so nothing here has to move it.
 git archive "$base" | tar -x -C "$tree" || die "cannot export $base"
 
@@ -70,7 +72,7 @@ target="$tree"
 # directory is the honest baseline for that, not an error.
 mkdir -p "$target"
 
-"$bin" baseline "$target" >"$work/baseline.txt" 2>&1 || {
+"$bin" baseline --force "$target" >"$work/baseline.txt" 2>&1 || {
 	cat "$work/baseline.txt" >&2
 	die "cannot snapshot the base commit"
 }

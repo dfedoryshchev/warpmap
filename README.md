@@ -147,7 +147,9 @@ verdict: RISK UP - this change made the codebase harder to work on safely
 ```
 
 `diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the
-snapshot is a single file, `.warpmap/baseline.json`.
+snapshot is a single file, `.warpmap/baseline.json`. `baseline` will not replace one that already
+exists, because re-baselining a worse tree makes every later `diff` pass; it exits 2 and says when
+the snapshot was saved. `baseline --force .` replaces it on purpose.
 
 the same loop run end to end against a real 95-file project, with the numbers it returned and
 what they did and did not mean, is in [examples/worked-audit.md](examples/worked-audit.md).
@@ -168,7 +170,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
   for you to read before you send it to anyone
 
 **guard changes** (the ratchet)
-- `baseline <dir>` - snapshot the current state
+- `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
 - `diff <dir>` - did the change make the codebase better or worse? exits non-zero on regression
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them

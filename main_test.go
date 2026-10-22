@@ -554,6 +554,58 @@ func TestRiskSkipMissingAssessesTheRestAndNamesWhatItLeftOut(t *testing.T) {
 	}
 }
 
+func TestBaselineRefusesToOverwriteAnExistingSnapshotUnlessForced(t *testing.T) {
+	dir := chainProject(t)
+	snapPath := baseline.Path(dir)
+
+	_, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) })
+	if code != 0 {
+		t.Fatalf("first baseline exited %d, want 0", code)
+	}
+	first, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "src", "d.ts"), []byte("import { a } from \"./a\";\nexport const d = a;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout string
+	stderr, code := capture(t, &os.Stderr, func() int {
+		var c int
+		stdout, c = captureStdout(t, func() int { return baselineCmd([]string{dir}) })
+		return c
+	})
+	if code != 2 {
+		t.Errorf("second baseline exited %d, want 2", code)
+	}
+	if stdout != "" {
+		t.Errorf("refused baseline printed a result:\n%s", stdout)
+	}
+	if !strings.Contains(stderr, "baseline already exists") || !strings.Contains(stderr, "--force") {
+		t.Errorf("stderr = %q, want it to say a baseline exists and name --force", stderr)
+	}
+	after, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(first) {
+		t.Fatalf("a refused baseline changed the snapshot:\n%s\nwas:\n%s", after, first)
+	}
+
+	_, code = captureStdout(t, func() int { return baselineCmd([]string{"--force", dir}) })
+	if code != 0 {
+		t.Fatalf("baseline --force exited %d, want 0", code)
+	}
+	forced, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(forced) == string(first) {
+		t.Fatal("baseline --force left the old snapshot in place")
+	}
+}
+
 // git reads the path it is given from inside the project, so a project named
 // relative to where the caller stands used to match no history at all and
 // every file printed `authors=0`.

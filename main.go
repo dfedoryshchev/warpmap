@@ -679,9 +679,15 @@ func diffCmd(args []string) int {
 
 func baselineCmd(args []string) int {
 	fset := flag.NewFlagSet("baseline", flag.ExitOnError)
+	force := fset.Bool("force", false, "replace an existing baseline")
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
-		fmt.Fprintln(os.Stderr, "usage: warpmap baseline <dir>")
+		fmt.Fprintln(os.Stderr, "usage: warpmap baseline [--force] <dir>")
+		return 2
+	}
+	if info, err := os.Stat(baseline.Path(dir)); err == nil && !*force {
+		fmt.Fprintf(os.Stderr, "baseline already exists (saved %s); `warpmap baseline --force %s` replaces it\n",
+			info.ModTime().Format("2006-01-02 15:04"), dir)
 		return 2
 	}
 	snap := baseline.Capture(dir, sourceFiles(dir))

@@ -60,6 +60,10 @@ All notable changes to this project are documented in this file.
   included, that holds every file
 
 ### Fixed
+- `baseline` overwrote `.warpmap/baseline.json` without a word, so running it again on a worse
+  tree moved the comparison point and every later `diff` passed. It now exits 2 when a snapshot
+  exists, saying when that one was saved; `baseline --force <dir>` replaces it on purpose. The
+  GitHub Action snapshots a throwaway export of the base commit and passes `--force`
 - tsconfig `paths` aliases were dropped when warpmap ran from inside a package whose
   `tsconfig.json` sits in a parent directory (`analyze .` from `packages/app`): the lookup never
   went above the directory it was given. It now climbs to the repository root (the directory
