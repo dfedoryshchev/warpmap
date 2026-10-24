@@ -32,10 +32,25 @@ func isEntryPoint(f string) bool {
 		return true
 	case strings.HasSuffix(base, ".d.ts"):
 		return true
-	case strings.Contains(base, ".test."), strings.Contains(base, ".spec."):
+	case IsTestName(base):
 		return true
 	}
 	return false
+}
+
+// IsTestName reports whether a file name, without its directory, follows a test
+// naming convention: `.test.` / `.spec.` and their type-test forms (`.test-d.ts`),
+// Go's `_test.go`, and pytest's `test_*.py`, `*_test.py` and `conftest.py`.
+func IsTestName(name string) bool {
+	base := strings.ToLower(name)
+	for _, mark := range []string{".test.", ".spec.", ".test-d.", ".spec-d."} {
+		if strings.Contains(base, mark) {
+			return true
+		}
+	}
+	return strings.HasSuffix(base, "_test.go") ||
+		(strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py")) ||
+		strings.HasSuffix(base, "_test.py") || base == "conftest.py"
 }
 
 // Cycles returns import cycles in the graph, each as the files on the cycle.

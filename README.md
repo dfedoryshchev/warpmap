@@ -62,7 +62,10 @@ back, on every command that ranks by churn. cx is a structural proxy -
 non-blank lines plus branch keywords - not cyclomatic complexity. the score is normalised
 against the worst churn and the worst complexity in this run, so it ranks files within one
 repo and means nothing between two. test files are left out of the ranking (the same test-file
-rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests.
+rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests. a test
+is a file named `*.test.*`, `*.spec.*`, `*.test-d.*`, `*.spec-d.*`, `*_test.go`, `test_*.py`, `*_test.py` or
+`conftest.py`, or any file under a `test/`, `tests/`, `__tests__/`, `__typetest__/` or `e2e/`
+directory.
 
 the first line goes to stderr and names the measure behind the complexity column. with lizard
 on your `PATH` it reads `complexity: lizard` and the column is `ccn`: lizard's cyclomatic

@@ -140,6 +140,11 @@ All notable changes to this project are documented in this file.
 - A `tools/call` on a directory whose `warpmap.json` is malformed ended the MCP server, so the
   client lost the session and got no reply to that call or any later one. The call is now
   answered with the error as its text and `isError` set, and the server keeps running
+- Python tests and TypeScript type tests did not count as tests: `test_*.py`, `*_test.py`,
+  `conftest.py`, `*.test-d.ts` and files under `test/` or `__typetest__/` were missed, so on a
+  Python package every file came out untested, and type-test files turned up in `dead` while
+  the files they check stayed untested. They now count as tests in `testgap`, `risk`, `brief`
+  and the `hotspots` ranking, and `dead` no longer lists a file named as a test
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

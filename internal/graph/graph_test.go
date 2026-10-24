@@ -17,6 +17,13 @@ func TestOrphans(t *testing.T) {
 	}
 }
 
+func TestOrphansSkipsPythonAndTypeTests(t *testing.T) {
+	g := Graph{Files: []string{"src/form.test-d.ts", "src/a.spec-d.ts", "pkg/test_a.py", "pkg/a_test.py", "pkg/conftest.py", "pkg/unused.py"}}
+	if got := Orphans(g); len(got) != 1 || got[0] != "pkg/unused.py" {
+		t.Fatalf("want [pkg/unused.py], got %v", got)
+	}
+}
+
 func TestCyclesFindsCycle(t *testing.T) {
 	cyclic := Graph{
 		Files: []string{"x.ts", "y.ts"},
