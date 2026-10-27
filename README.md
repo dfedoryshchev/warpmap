@@ -502,7 +502,10 @@ links a network stack, directly or transitively, and a test holds that line:
 `net/...`, and fails again if more than one package is allowed the exception. the file list
 comes from `git ls-files` (and `git check-ignore`, to tell an ignored folder from an empty one)
 and history from `git log`, each run as a local subprocess in the directory you pointed at or a
-repo found under it, and `hotspots` and `ownership` also start `lizard --csv` when lizard is on
+repo found under it, with `core.fsmonitor` and `log.showSignature` switched off and
+`GIT_NO_LAZY_FETCH=1` set, so the repo's own config cannot make git start a hook or a
+`gpg.program`, or fetch the objects a partial clone lacks. `hotspots` and `ownership` also start
+`lizard --csv` when lizard is on
 your `PATH`. `collect` starts `gitleaks`, `lizard` and `jscpd`, each only when it is on your
 `PATH`.
 

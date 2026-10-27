@@ -1,10 +1,11 @@
 package metrics
 
 import (
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
 )
 
 // Owners returns the distinct authors who have touched a file, most commits first.
@@ -18,7 +19,7 @@ import (
 // %aE apply the repo's .mailmap, then commits that share an email or a name
 // (ignoring case) are the same person, named by the spelling they used most.
 func Owners(file string) []string {
-	out, err := exec.Command("git", "-C", filepath.Dir(file), "log", "--format=%aN%x00%aE", "--", filepath.Base(file)).Output()
+	out, err := gitcmd.Command(filepath.Dir(file), "log", "--no-ext-diff", "--no-textconv", "--format=%aN%x00%aE", "--", filepath.Base(file)).Output()
 	if err != nil {
 		return nil
 	}

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/report"
@@ -130,7 +131,7 @@ func projectPath(dir, p string) string {
 }
 
 func inGitRepo(dir string) bool {
-	return exec.Command("git", "-C", dir, "rev-parse", "--is-inside-work-tree").Run() == nil
+	return gitcmd.Command(dir, "rev-parse", "--is-inside-work-tree").Run() == nil
 }
 
 // gitleaks with --redact still keeps the text around a secret in Match, and

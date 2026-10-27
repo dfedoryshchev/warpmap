@@ -19,6 +19,7 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
 	"github.com/dfedoryshchev/warpmap/internal/dashboard"
 	"github.com/dfedoryshchev/warpmap/internal/explain"
+	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/mcp"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
@@ -226,7 +227,7 @@ func hasGit(dir string) bool {
 // itself - a folder of clones kept out of an outer repo lists empty there, and
 // has to be walked for the repos inside it instead.
 func gitFiles(dir string) (entries []string, ok bool) {
-	out, err := exec.Command("git", "-C", dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
+	out, err := gitcmd.Command(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard").Output()
 	if err != nil {
 		return nil, false
 	}
@@ -235,7 +236,7 @@ func gitFiles(dir string) (entries []string, ok bool) {
 			entries = append(entries, e)
 		}
 	}
-	if len(entries) == 0 && exec.Command("git", "-C", dir, "check-ignore", "-q", ".").Run() == nil {
+	if len(entries) == 0 && gitcmd.Command(dir, "check-ignore", "-q", ".").Run() == nil {
 		return nil, false
 	}
 	return entries, true

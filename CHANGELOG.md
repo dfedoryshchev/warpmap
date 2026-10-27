@@ -145,6 +145,12 @@ All notable changes to this project are documented in this file.
   Python package every file came out untested, and type-test files turned up in `dead` while
   the files they check stayed untested. They now count as tests in `testgap`, `risk`, `brief`
   and the `hotspots` ranking, and `dead` no longer lists a file named as a test
+- The analysed repository's own `.git/config` could make warpmap's git calls start a program
+  it names: a `core.fsmonitor` hook ran on every file listing, and with `log.showSignature` set,
+  `gpg.program` ran for each signed commit `hotspots` and `ownership` read. On a checkout handed
+  over by someone else that is their program running on your machine. Every git call now turns
+  both off on the command line, which outranks the repository's config, skips optional locks,
+  and sets `GIT_NO_LAZY_FETCH=1` so a partial clone does not fetch from its remote
 
 ### Deprecated
 - `explain` will be removed in 0.3.0. `brief` and `mcp` already hand an agent the facts to

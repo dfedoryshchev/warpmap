@@ -3,11 +3,12 @@ package metrics
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
 )
 
 // Churn counts how many commits touched each file within the window, keyed by
@@ -73,7 +74,7 @@ func normalizeRename(p string) string {
 // only its own changes count, keyed relative to it.
 func GitChurn(dir string, windowMonths int) (Churn, int, error) {
 	since := fmt.Sprintf("%d months ago", windowMonths)
-	out, err := exec.Command("git", "-C", dir, "log", "--since", since, "--no-merges",
+	out, err := gitcmd.Command(dir, "log", "--since", since, "--no-merges", "--no-ext-diff", "--no-textconv",
 		"--relative", "--numstat", "--format=%H", "--", ".").Output()
 	if err != nil {
 		return nil, 0, err
