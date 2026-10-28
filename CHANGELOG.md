@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-28
+
 ### Added
 - `warpmap.json` in the analysed directory: `ignore` globs that add to the built-in skip list,
   and `thresholds.blast` for where `risk` starts calling a change risky. A malformed file stops

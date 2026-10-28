@@ -22,7 +22,7 @@ nothing else changes. check it landed:
 
 ```
 $ warpmap version
-warpmap 0.2.0-dev
+warpmap 0.2.0
 ```
 
 `warpmap help` lists every command.
