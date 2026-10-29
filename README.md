@@ -59,7 +59,7 @@ complexity: internal (cx = non-blank lines + 3 x branch keywords); lizard on PAT
 
 churn is how many commits touched the file in the last 6 months; `--months 24` reads further
 back, on every command that ranks by churn. cx is a structural proxy -
-non-blank lines plus branch keywords - not cyclomatic complexity. the score is normalised
+non-blank lines plus three for each branch keyword - not cyclomatic complexity. the score is normalised
 against the worst churn and the worst complexity in this run, so it ranks files within one
 repo and means nothing between two. test files are left out of the ranking (the same test-file
 rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests. a test
