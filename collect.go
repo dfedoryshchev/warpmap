@@ -56,8 +56,8 @@ func collectCmd(args []string) int {
 
 	folder := map[string][]byte{}
 	files := sourceFiles(dir)
-	churn, window := metrics.ProjectChurn(dir, files, int(*months))
-	r := report.Build(dir, files, churn)
+	commits, window := metrics.ProjectCommits(dir, files, int(*months))
+	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
 	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
 	pack, err := r.JSON()
 	if err != nil {

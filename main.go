@@ -45,6 +45,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "  cycles <dir>           import cycles")
 	fmt.Fprintln(w, "  god <dir>              files with fan-in + fan-out of 20 or more (--all)")
 	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
+	fmt.Fprintln(w, "  coupling <dir>         files that change together with no import between them (--json)")
 	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
 	fmt.Fprintln(w, "  report <dir>           full audit, markdown or --json (-o file)")
 	fmt.Fprintln(w, "  dashboard <dir>        hotspot treemap as one html page (-o file)")
@@ -647,6 +648,53 @@ func ownershipCmd(args []string) int {
 	return 0
 }
 
+func couplingCmd(args []string) int {
+	fset := flag.NewFlagSet("coupling", flag.ExitOnError)
+	top := fset.Int("n", 15, "how many pairs to show")
+	asJSON := fset.Bool("json", false, "print the pairs as json")
+	months := monthsFlag(fset)
+	dir := arg(parseArgs(fset, args), 0)
+	if dir == "" {
+		fmt.Fprintln(os.Stderr, "usage: warpmap coupling <dir>")
+		return 2
+	}
+	files := rankedFiles(dir)
+	commits, window := metrics.ProjectCommits(dir, files, int(*months))
+	if window.Err != nil {
+		fmt.Fprintln(os.Stderr, "coupling: no git history to read here")
+	} else {
+		fmt.Fprintf(os.Stderr, "coupling: %s, %d of them not counted for changing more than %d files\n",
+			window.Span(), metrics.LargeCommits(commits), metrics.CouplingMaxFiles)
+	}
+	for _, f := range files {
+		if !sourceExt[filepath.Ext(f)] {
+			fmt.Fprintln(os.Stderr, "coupling: imports are read in ts, tsx, js, jsx and py files only; a pair in another language is listed whether or not an import joins it")
+			break
+		}
+	}
+	pairs := metrics.HiddenCoupling(dir, files, graph.Build(files), commits)
+	pairs = pairs[:max(0, min(*top, len(pairs)))]
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		enc.Encode(struct {
+			Pairs []report.Coupled `json:"pairs"`
+		}{report.CoupledPairs(pairs)})
+		return 0
+	}
+	if len(pairs) == 0 {
+		fmt.Printf("no two files changed together in %d or more commits at a score of %.2f or more\n",
+			metrics.CouplingMinShared, metrics.CouplingMinScore)
+		return 0
+	}
+	fmt.Printf("files that change together, %d or more shared commits at a score of %.2f or more (pairs an import joins left out):\n",
+		metrics.CouplingMinShared, metrics.CouplingMinScore)
+	for _, p := range pairs {
+		fmt.Printf("  %.2f  together=%d/%-3d %s + %s\n", p.Score, p.Shared, min(p.ChangesA, p.ChangesB), p.A, p.B)
+	}
+	return 0
+}
+
 func diffCmd(args []string) int {
 	fset := flag.NewFlagSet("diff", flag.ExitOnError)
 	dir := arg(parseArgs(fset, args), 0)
@@ -712,8 +760,8 @@ func reportCmd(args []string) int {
 		return 2
 	}
 	files := sourceFiles(dir)
-	churn, window := metrics.ProjectChurn(dir, files, int(*months))
-	r := report.Build(dir, files, churn)
+	commits, window := metrics.ProjectCommits(dir, files, int(*months))
+	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
 	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
 	doc := r.Markdown()
 	if *asJSON {
@@ -820,6 +868,8 @@ func main() {
 		os.Exit(testgapCmd(os.Args[2:]))
 	case "ownership":
 		os.Exit(ownershipCmd(os.Args[2:]))
+	case "coupling":
+		os.Exit(couplingCmd(os.Args[2:]))
 	case "risk":
 		os.Exit(riskCmd(os.Args[2:]))
 	case "explain":

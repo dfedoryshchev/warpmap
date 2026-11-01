@@ -134,6 +134,11 @@ every other command names them, so the document and the json agree file for file
 carries a path off the machine that ran the audit. `findings` and `hotspots` are always
 lists, empty ones included, so nothing has to special-case a project with nothing to report.
 
+the report opens with its lead signals, above the findings: the files that keep changing together
+with no import between them ([below](#files-that-change-together)), up to ten pairs. in the json
+they are `coupling`, a list like the other two, each pair with `a`, `b`, `together`, `changes_a`,
+`changes_b` and `score`.
+
 ### then keep it from getting worse
 
 snapshot the state you inherited, change something, and ask whether it got better or worse:
@@ -168,6 +173,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
   the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
   with an import edge
 - `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
+- `coupling <dir>` - files that keep changing in the same commits with no import between them
+  (`-n`, `--json`, `--months`)
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page
 - `collect <dir> -o <folder>` - the analysis in one folder, with no line of your source in it,
   for you to read before you send it to anyone
@@ -195,6 +202,40 @@ authors: `ownership` and `brief` count people, not name strings. git applies the
 `.mailmap` first, then commits that share an email, or a name up to case, count as one person,
 shown under the name they used most. someone who committed under a different name AND a different
 email, with no `.mailmap` line joining the two, still counts twice; add the line to fix the count.
+
+## files that change together
+
+two files that keep changing in the same commits depend on each other somehow. when neither
+imports the other, the import graph cannot show it: a shared object passed around as a value, a
+format both sides read, a rule written down twice. `coupling` finds those pairs from history. on
+a repo where `src/a.ts` and `src/b.ts` changed together in three commits, and `src/c.ts` and the
+`src/d.ts` it imports changed together in three others:
+
+```
+$ warpmap coupling .
+coupling: 6 commits in the last 6 months, 0 of them not counted for changing more than 20 files
+files that change together, 3 or more shared commits at a score of 0.30 or more (pairs an import joins left out):
+  1.00  together=3/3   src/a.ts + src/b.ts
+```
+
+`together=3/3` is three shared commits out of the three that changed the quieter of the two files,
+and the score is that share. a pair is listed when it shares at least 3 commits at a score of
+0.30 or more; a commit that changed more than 20 files is not counted at all, neither for its
+pairs nor for its files' change counts, since a bulk rename or a formatting pass changes
+everything together and says nothing about which files depend on each other. a repo that squashes
+large pull requests into one commit loses its coupling inside them the same way; the first stderr
+line says how many commits were left out. those three thresholds are the ones
+[codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT) uses in
+`src/pipeline/pass_githistory.c`; it reads a year of history, warpmap reads the `--months` window,
+6 by default, like every other command. merges are not counted, a renamed file counts under its
+new name, and test files are left out, since a test changes with the code it covers by design.
+
+a pair joined by an import, either way, is left out, but imports are only read in ts, tsx, js,
+jsx and py files. `coupling` lists every language `hotspots` ranks, so in a Go or C# project a
+listed pair may well import one another; a second stderr line says so whenever such a file was
+walked. pairs come highest score first, then most shared commits, then by path; `-n` caps the
+list (15 by default) and `--json` prints it as `{"pairs": [...]}` in the report's `coupling`
+shape.
 
 ## the dashboard
 

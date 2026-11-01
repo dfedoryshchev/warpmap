@@ -40,7 +40,7 @@ type decoded struct {
 // exists to find.
 func TestJSONStatesWhatTheMarkdownStates(t *testing.T) {
 	dir := auditProject(t)
-	r := Build(dir, sources(t, dir), metrics.Churn{"src/hub.ts": 9, "src/p.ts": 4, "src/q.ts": 2})
+	r := Build(dir, sources(t, dir), metrics.Churn{"src/hub.ts": 9, "src/p.ts": 4, "src/q.ts": 2}, nil)
 
 	raw, err := r.JSON()
 	if err != nil {
@@ -101,7 +101,7 @@ func TestJSONStatesWhatTheMarkdownStates(t *testing.T) {
 // the markdown does and not the way the analysing machine's disk does.
 func TestJSONNamesFilesRelativeToTheProject(t *testing.T) {
 	dir := auditProject(t)
-	r := Build(dir, sources(t, dir), metrics.Churn{"src/hub.ts": 1})
+	r := Build(dir, sources(t, dir), metrics.Churn{"src/hub.ts": 1}, nil)
 
 	raw, err := r.JSON()
 	if err != nil {
@@ -126,7 +126,7 @@ func TestJSONNamesFilesRelativeToTheProject(t *testing.T) {
 // document and in the pack.
 func TestEveryFindingNamesItsFiles(t *testing.T) {
 	dir := auditProject(t)
-	r := Build(dir, sources(t, dir), metrics.Churn{})
+	r := Build(dir, sources(t, dir), metrics.Churn{}, nil)
 	raw, err := r.JSON()
 	if err != nil {
 		t.Fatalf("JSON: %v", err)
@@ -186,12 +186,12 @@ func TestEveryFindingNamesItsFiles(t *testing.T) {
 // a project with nothing to say still answers in the same shape: a consumer
 // iterating the pack must not have to special-case null.
 func TestJSONKeepsEmptyListsAsLists(t *testing.T) {
-	r := Build(t.TempDir(), nil, metrics.Churn{})
+	r := Build(t.TempDir(), nil, metrics.Churn{}, nil)
 	raw, err := r.JSON()
 	if err != nil {
 		t.Fatalf("JSON: %v", err)
 	}
-	for _, want := range []string{"\"findings\": []", "\"hotspots\": []"} {
+	for _, want := range []string{"\"coupling\": []", "\"findings\": []", "\"hotspots\": []"} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("want %s in\n%s", want, raw)
 		}
