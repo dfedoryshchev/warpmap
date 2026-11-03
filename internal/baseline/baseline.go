@@ -107,10 +107,7 @@ func Compare(before, after Snapshot) Diff {
 		GodModules: after.GodModules - before.GodModules,
 	}
 	for f, a := range after.Complexity {
-		b, ok := before.Complexity[f]
-		if !ok {
-			continue // a file with no baseline is not a regression
-		}
+		b := before.Complexity[f]
 		switch {
 		case a > b:
 			d.Worsened = append(d.Worsened, Change{f, b, a})
