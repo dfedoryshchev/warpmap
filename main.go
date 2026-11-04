@@ -703,9 +703,13 @@ func diffCmd(args []string) int {
 		return 2
 	}
 	before, err := baseline.Load(dir)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		fmt.Fprintf(os.Stderr, "no baseline; run `warpmap baseline %s` first\n", dir)
-		return 1
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "cannot read baseline %s: %v\n", baseline.Path(dir), err)
+		return 2
 	}
 	d := baseline.Compare(before, baseline.Capture(dir, sourceFiles(dir)))
 	fmt.Printf("since baseline: edges %+d, cycles %+d, orphans %+d, god-modules %+d\n",

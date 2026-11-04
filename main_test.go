@@ -606,6 +606,46 @@ func TestBaselineRefusesToOverwriteAnExistingSnapshotUnlessForced(t *testing.T) 
 	}
 }
 
+func TestDiffTellsAMissingBaselineApartFromRiskUp(t *testing.T) {
+	dir := chainProject(t)
+	diff := func() (stdout, stderr string, code int) {
+		t.Helper()
+		stderr, code = capture(t, &os.Stderr, func() int {
+			var c int
+			stdout, c = captureStdout(t, func() int { return diffCmd([]string{dir}) })
+			return c
+		})
+		return stdout, stderr, code
+	}
+
+	stdout, stderr, code := diff()
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "no baseline") {
+		t.Fatalf("diff with no baseline exited %d, stdout %q, stderr %q; want 2, nothing on stdout, and \"no baseline\" on stderr", code, stdout, stderr)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(baseline.Path(dir)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(baseline.Path(dir), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code = diff()
+	if code != 2 || stdout != "" || !strings.Contains(stderr, "cannot read baseline") || strings.Contains(stderr, "no baseline") {
+		t.Fatalf("diff with a malformed baseline exited %d, stdout %q, stderr %q; want 2, nothing on stdout, and \"cannot read baseline\" on stderr", code, stdout, stderr)
+	}
+
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{"--force", dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "c.ts"), []byte("import { a } from \"./a\";\nexport const c = a;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, code = diff()
+	if code != 1 || !strings.Contains(stdout, "verdict: RISK UP") {
+		t.Fatalf("diff after adding a cycle exited %d and printed\n%swant 1 and a RISK UP verdict", code, stdout)
+	}
+}
+
 // git reads the path it is given from inside the project, so a project named
 // relative to where the caller stands used to match no history at all and
 // every file printed `authors=0`.

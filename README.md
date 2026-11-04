@@ -154,8 +154,16 @@ since baseline: edges +0, cycles +0, orphans +0, god-modules +0
 verdict: RISK UP - this change made the codebase harder to work on safely
 ```
 
-`diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the
-snapshot is a single file, `.warpmap/baseline.json`. `baseline` will not replace one that already
+`diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the exit
+code says which outcome it was:
+
+- `0` - no net degradation
+- `1` - `RISK UP`, the change made things worse
+- `2` - no comparison was made: there is no baseline, the baseline cannot be read, the
+  command was called wrong, or `warpmap.json` is malformed. the reason goes to stderr, so a gate that never had a baseline does
+  not read as a change that made things worse
+
+the snapshot is a single file, `.warpmap/baseline.json`. `baseline` will not replace one that already
 exists, because re-baselining a worse tree makes every later `diff` pass; it exits 2 and says when
 the snapshot was saved. `baseline --force .` replaces it on purpose.
 
@@ -181,7 +189,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
-- `diff <dir>` - did the change make the codebase better or worse? exits non-zero on regression
+- `diff <dir>` - did the change make the codebase better or worse? exits 1 on regression, 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them
 
