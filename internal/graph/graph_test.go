@@ -1,6 +1,9 @@
 package graph
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func sample() Graph {
 	// b imports a, c imports b  (an acyclic chain)
@@ -34,6 +37,58 @@ func TestCyclesFindsCycle(t *testing.T) {
 	}
 	if got := Cycles(sample()); len(got) != 0 {
 		t.Fatalf("acyclic graph should have no cycles, got %v", got)
+	}
+}
+
+func edges(pairs ...string) []Edge {
+	var es []Edge
+	for i := 0; i+1 < len(pairs); i += 2 {
+		es = append(es, Edge{From: pairs[i], To: pairs[i+1]})
+	}
+	return es
+}
+
+func TestCyclesReportOneTangleOnce(t *testing.T) {
+	g := Graph{
+		Files: []string{"a.ts", "b.ts", "c.ts"},
+		Edges: edges("a.ts", "b.ts", "b.ts", "a.ts", "b.ts", "c.ts", "c.ts", "a.ts"),
+	}
+	got := Cycles(g)
+	if len(got) != 1 {
+		t.Fatalf("a, b and c all reach each other, so one tangle; got %d: %v", len(got), got)
+	}
+	if strings.Join(got[0].Files, ",") != "a.ts,b.ts,c.ts" || got[0].Ring {
+		t.Fatalf("want the tangle's files a, b, c in path order, not a ring; got %+v", got[0])
+	}
+}
+
+func TestCyclesKeepImportOrderForARing(t *testing.T) {
+	g := Graph{
+		Files: []string{"a.ts", "b.ts", "c.ts"},
+		Edges: edges("a.ts", "c.ts", "c.ts", "b.ts", "b.ts", "a.ts", "a.ts", "c.ts"),
+	}
+	got := Cycles(g)
+	if len(got) != 1 || !got[0].Ring || strings.Join(got[0].Files, ",") != "a.ts,c.ts,b.ts" {
+		t.Fatalf("want one ring a -> c -> b, got %+v", got)
+	}
+}
+
+func TestCyclesReportDisjointTanglesLargestFirst(t *testing.T) {
+	g := Graph{
+		Files: []string{"x.ts", "y.ts", "p.ts", "q.ts", "r.ts", "s.ts", "lone.ts"},
+		Edges: edges(
+			"x.ts", "y.ts", "y.ts", "x.ts",
+			"p.ts", "q.ts", "q.ts", "r.ts", "r.ts", "p.ts", "q.ts", "p.ts",
+			"s.ts", "s.ts",
+			"lone.ts", "x.ts", "r.ts", "x.ts",
+		),
+	}
+	got := Cycles(g)
+	if len(got) != 2 {
+		t.Fatalf("want two tangles (p-q-r and x-y), got %d: %v", len(got), got)
+	}
+	if strings.Join(got[0].Files, ",") != "p.ts,q.ts,r.ts" || strings.Join(got[1].Files, ",") != "x.ts,y.ts" {
+		t.Fatalf("want [p q r] then [x y], got %v", got)
 	}
 }
 

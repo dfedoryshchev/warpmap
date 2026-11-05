@@ -67,11 +67,15 @@ func Findings(g graph.Graph, dir string) []Finding {
 		})
 	}
 	for _, c := range graph.Cycles(g) {
-		files := relPaths(dir, c)
+		files := relPaths(dir, c.Files)
+		sep := ", "
+		if c.Ring {
+			sep = " -> "
+		}
 		fs = append(fs, Finding{
 			Severity:       Med,
 			Kind:           "cycle",
-			Detail:         fmt.Sprintf("import cycle across %d files: %s", len(files), name(files, " -> ")),
+			Detail:         fmt.Sprintf("import cycle across %d files: %s", len(files), name(files, sep)),
 			Recommendation: "break it - extract the shared piece into a third module",
 			Files:          files,
 		})

@@ -53,10 +53,21 @@ func IsTestName(name string) bool {
 		strings.HasSuffix(base, "_test.py") || base == "conftest.py"
 }
 
-// Cycles returns import cycles in the graph, each as the files on the cycle.
-// circular imports are a real maintenance smell: neither file can be understood or
-// changed without the other.
-func Cycles(g Graph) [][]string {
+// Cycle is one import tangle: a set of files that all reach each other through
+// imports (a strongly connected component of two or more files).
+type Cycle struct {
+	// Files is in import order when Ring is true, each file importing the next and
+	// the last importing the first; otherwise it is in path order.
+	Files []string
+	// Ring reports whether the tangle is a single loop, every file importing exactly
+	// one other file of the tangle.
+	Ring bool
+}
+
+// Cycles returns the import tangles in the graph, one per strongly connected
+// component, largest first. circular imports are a maintenance smell: no file in
+// a tangle can be understood or changed without the others.
+func Cycles(g Graph) []Cycle {
 	adj := map[string][]string{}
 	for _, e := range g.Edges {
 		if e.From == e.To {
@@ -64,41 +75,83 @@ func Cycles(g Graph) [][]string {
 		}
 		adj[e.From] = append(adj[e.From], e.To)
 	}
-	const (
-		unvisited = 0
-		onStack   = 1
-		done      = 2
-	)
-	state := map[string]int{}
+	index := map[string]int{}
+	low := map[string]int{}
+	onStack := map[string]bool{}
 	var stack []string
-	var cycles [][]string
-	var dfs func(node string)
-	dfs = func(node string) {
-		state[node] = onStack
+	var comps [][]string
+	var visit func(node string)
+	visit = func(node string) {
+		index[node] = len(index)
+		low[node] = index[node]
 		stack = append(stack, node)
+		onStack[node] = true
 		for _, next := range adj[node] {
-			switch state[next] {
-			case unvisited:
-				dfs(next)
-			case onStack:
-				for i := len(stack) - 1; i >= 0; i-- {
-					if stack[i] == next {
-						cycle := append([]string{}, stack[i:]...)
-						cycles = append(cycles, cycle)
-						break
-					}
-				}
+			if _, seen := index[next]; !seen {
+				visit(next)
+				low[node] = min(low[node], low[next])
+			} else if onStack[next] {
+				low[node] = min(low[node], index[next])
 			}
 		}
-		stack = stack[:len(stack)-1]
-		state[node] = done
-	}
-	for _, f := range g.Files {
-		if state[f] == unvisited {
-			dfs(f)
+		if low[node] != index[node] {
+			return
+		}
+		var comp []string
+		for {
+			top := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			onStack[top] = false
+			comp = append(comp, top)
+			if top == node {
+				break
+			}
+		}
+		if len(comp) > 1 {
+			comps = append(comps, comp)
 		}
 	}
+	for _, f := range g.Files {
+		if _, seen := index[f]; !seen {
+			visit(f)
+		}
+	}
+	var cycles []Cycle
+	for _, comp := range comps {
+		cycles = append(cycles, tangle(comp, adj))
+	}
+	sort.Slice(cycles, func(i, j int) bool {
+		if len(cycles[i].Files) != len(cycles[j].Files) {
+			return len(cycles[i].Files) > len(cycles[j].Files)
+		}
+		return cycles[i].Files[0] < cycles[j].Files[0]
+	})
 	return cycles
+}
+
+func tangle(comp []string, adj map[string][]string) Cycle {
+	sort.Strings(comp)
+	in := map[string]bool{}
+	for _, f := range comp {
+		in[f] = true
+	}
+	next := map[string]string{}
+	for _, f := range comp {
+		for _, t := range adj[f] {
+			if !in[t] || t == next[f] {
+				continue
+			}
+			if next[f] != "" {
+				return Cycle{Files: comp}
+			}
+			next[f] = t
+		}
+	}
+	ring := make([]string, 0, len(comp))
+	for f := comp[0]; len(ring) < len(comp); f = next[f] {
+		ring = append(ring, f)
+	}
+	return Cycle{Files: ring, Ring: true}
 }
 
 type Module struct {

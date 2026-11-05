@@ -447,13 +447,21 @@ func cyclesCmd(args []string) int {
 		return 2
 	}
 	cycles := graph.Cycles(graph.Build(sourceFiles(dir)))
-	fmt.Printf("%d import cycles:\n", len(cycles))
+	if len(cycles) == 0 {
+		fmt.Println("0 import cycles:")
+		return 0
+	}
+	fmt.Printf("%d import cycles, largest %d files:\n", len(cycles), len(cycles[0].Files))
 	for _, c := range cycles {
-		hop := make([]string, len(c))
-		for i, f := range c {
-			hop[i] = rel(dir, f)
+		files := make([]string, len(c.Files))
+		for i, f := range c.Files {
+			files[i] = rel(dir, f)
 		}
-		fmt.Printf("  %s\n", strings.Join(hop, " -> "))
+		if c.Ring {
+			fmt.Printf("  %s\n", strings.Join(files, " -> "))
+		} else {
+			fmt.Printf("  %d files importing each other: %s\n", len(files), strings.Join(files, ", "))
+		}
 	}
 	return 0
 }

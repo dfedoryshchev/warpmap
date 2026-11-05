@@ -124,8 +124,10 @@ $ warpmap report . --json | head -4
 ```
 
 each finding carries its `severity`, `kind`, `detail` and `recommendation`, and `files`: every
-file behind it, the god module itself, the files on the import cycle in the order they import
-each other, or the files nothing imports. the `detail` names them too, in both formats, and stops
+file behind it, the god module itself, the files of one import cycle, or the files nothing
+imports. a cycle is every file that reaches the others through imports, reported once however
+many loops run through it; when it is a single loop its files are in the order they import each
+other, otherwise in path order. the `detail` names them too, in both formats, and stops
 after ten with `and <n> more`; `files` always holds the whole list.
 
 each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
@@ -176,7 +178,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz)
 - `hotspots <dir>` - the files that change often AND are complex; start here
 - `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
-- `dead` / `cycles` - orphans, import cycles
+- `dead` / `cycles` - orphans, import cycles (one row per set of files that import each other,
+  largest first)
 - `god <dir>` - over-central modules: files whose fan-in + fan-out is 20 or more, the same line
   the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
   with an import edge
