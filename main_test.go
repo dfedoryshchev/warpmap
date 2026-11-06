@@ -646,6 +646,66 @@ func TestDiffTellsAMissingBaselineApartFromRiskUp(t *testing.T) {
 	}
 }
 
+func diffOutput(t *testing.T, dir string) (stdout, stderr string, code int) {
+	t.Helper()
+	stderr, code = capture(t, &os.Stderr, func() int {
+		var c int
+		stdout, c = captureStdout(t, func() int { return diffCmd([]string{dir}) })
+		return c
+	})
+	return stdout, stderr, code
+}
+
+func TestDiffNamesTheFunctionsThatAreNewOrGrew(t *testing.T) {
+	dir := chainProject(t)
+	installFakeLizard(t, "c.ts=3:1:6;b.ts=5:2:20")
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+
+	installFakeLizard(t, "c.ts=22:9:140+2:0:4;b.ts=4:2:18")
+	stdout, stderr, code := diffOutput(t, dir)
+	if code != 0 {
+		t.Fatalf("diff exited %d; per-function changes are printed, they do not move the verdict\n%s%s", code, stdout, stderr)
+	}
+	for _, want := range []string{
+		"2 functions new or grown:\n",
+		"  grown  src/c.ts f0 - arguments 1 -> 9, lines 6 -> 140, CCN 3 -> 22\n",
+		"  added  src/c.ts f1 - 0 arguments, 4 lines, CCN 2\n",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("diff did not print %q in\n%s", want, stdout)
+		}
+	}
+	if strings.Contains(stdout, "src/b.ts") {
+		t.Fatalf("a function that shrank was listed:\n%s", stdout)
+	}
+}
+
+func TestDiffSaysWhenPerFunctionDataIsUnavailable(t *testing.T) {
+	dir := chainProject(t)
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	installFakeLizard(t, "c.ts=22:9:140")
+	stdout, stderr, code := diffOutput(t, dir)
+	if code != 0 || strings.Contains(stdout, "new or grown") {
+		t.Fatalf("a baseline saved without lizard listed functions as new (exit %d):\n%s", code, stdout)
+	}
+	if !strings.Contains(stderr, "per-function: unavailable") || !strings.Contains(stderr, "baseline") {
+		t.Fatalf("stderr does not say the baseline holds no per-function data:\n%s", stderr)
+	}
+
+	t.Setenv("PATH", "")
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{"--force", dir}) }); code != 0 {
+		t.Fatalf("baseline --force exited %d, want 0", code)
+	}
+	stdout, stderr, _ = diffOutput(t, dir)
+	if strings.Contains(stdout, "new or grown") || !strings.Contains(stderr, "per-function: unavailable") || !strings.Contains(stderr, "lizard") {
+		t.Fatalf("without lizard, diff printed\n%s\nand on stderr\n%s\nwant no function rows and a line naming lizard", stdout, stderr)
+	}
+}
+
 // git reads the path it is given from inside the project, so a project named
 // relative to where the caller stands used to match no history at all and
 // every file printed `authors=0`.

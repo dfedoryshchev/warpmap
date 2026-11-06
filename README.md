@@ -165,6 +165,13 @@ code says which outcome it was:
   command was called wrong, or `warpmap.json` is malformed. the reason goes to stderr, so a gate that never had a baseline does
   not read as a change that made things worse
 
+with `lizard` on `PATH` the snapshot also keeps every function's length, arguments and cyclomatic
+complexity, and `diff` lists the functions that are new or grew in any of the three, before and
+after (`grown  src/a.ts parse - arguments 2 -> 9, lines 30 -> 140, CCN 4 -> 22`), most complex
+first. the list is printed only; it does not change the verdict or the exit code. without lizard,
+or against a snapshot saved without it, `diff` says on stderr that per-function data is
+unavailable and lists nothing.
+
 the snapshot is a single file, `.warpmap/baseline.json`. `baseline` will not replace one that already
 exists, because re-baselining a worse tree makes every later `diff` pass; it exits 2 and says when
 the snapshot was saved. `baseline --force .` replaces it on purpose.

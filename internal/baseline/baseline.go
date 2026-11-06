@@ -2,6 +2,7 @@ package baseline
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,6 +20,83 @@ type Snapshot struct {
 	Orphans    int            `json:"orphans"`
 	GodModules int            `json:"godModules"`
 	Complexity map[string]int `json:"complexity"` // repo-relative path -> score
+	// Functions is nil when no per-function data was taken (lizard absent, or a
+	// snapshot written before the field existed) and a list, maybe empty, otherwise.
+	Functions []Function `json:"functions"`
+}
+
+// Function is one function's measurements, keyed by its repo-relative file and name.
+type Function struct {
+	File   string `json:"file"`
+	Name   string `json:"name"`
+	NLOC   int    `json:"nloc"`
+	CCN    int    `json:"ccn"`
+	Params int    `json:"params"`
+	Length int    `json:"length"`
+}
+
+// CaptureFunctions measures every function in files with the lizard executable at
+// bin, named relative to dir.
+func CaptureFunctions(bin, dir string, files []string) ([]Function, error) {
+	fns, err := metrics.LizardFunctions(bin, files)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Function, 0, len(fns))
+	for _, fn := range fns {
+		rel, e := filepath.Rel(dir, fn.File)
+		if e != nil {
+			rel = fn.File
+		}
+		out = append(out, Function{File: filepath.ToSlash(rel), Name: fn.Name, NLOC: fn.NLOC, CCN: fn.CCN, Params: fn.Params, Length: fn.Length})
+	}
+	return out, nil
+}
+
+// FunctionChange is a function that is new since the baseline (Before nil) or
+// grew in length, arguments or complexity.
+type FunctionChange struct {
+	Before *Function
+	After  Function
+}
+
+// CompareFunctions lists the functions in after that are new or grew since before,
+// most complex first.
+func CompareFunctions(before, after []Function) []FunctionChange {
+	// a file can hold several functions under one name (overloads, anonymous
+	// callbacks), so the n-th of a name in a file pairs with the n-th one before.
+	key := func(seen map[string]int, f Function) string {
+		k := f.File + "\x00" + f.Name
+		seen[k]++
+		return fmt.Sprintf("%s\x00%d", k, seen[k])
+	}
+	old := map[string]Function{}
+	seen := map[string]int{}
+	for _, f := range before {
+		old[key(seen, f)] = f
+	}
+	var out []FunctionChange
+	seen = map[string]int{}
+	for _, f := range after {
+		b, ok := old[key(seen, f)]
+		switch {
+		case !ok:
+			out = append(out, FunctionChange{After: f})
+		case f.Length > b.Length || f.Params > b.Params || f.CCN > b.CCN:
+			out = append(out, FunctionChange{Before: &b, After: f})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].After, out[j].After
+		if a.CCN != b.CCN {
+			return a.CCN > b.CCN
+		}
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		return a.Name < b.Name
+	})
+	return out
 }
 
 func godCount(g graph.Graph) int {

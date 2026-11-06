@@ -110,6 +110,21 @@ func TestLizardComplexitySumsEachFilesFunctions(t *testing.T) {
 	}
 }
 
+func TestLizardFunctionsKeepsEachFunctionsNumbers(t *testing.T) {
+	files := writeFiles(t, t.TempDir(), map[string]string{"a.go": "package a\n"})
+	fns, err := LizardFunctions(installFakeLizard(t, "a.go=3+2"), files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Function{
+		{File: files[0], Name: "f0", NLOC: 6, CCN: 3, Params: 1, Length: 6},
+		{File: files[0], Name: "f1", NLOC: 6, CCN: 2, Params: 1, Length: 6},
+	}
+	if len(fns) != 2 || fns[0] != want[0] || fns[1] != want[1] {
+		t.Fatalf("functions = %+v, want %+v", fns, want)
+	}
+}
+
 func TestLizardComplexityRefusesOutputAboutOtherFiles(t *testing.T) {
 	files := writeFiles(t, t.TempDir(), map[string]string{"a.go": "package a\n"})
 	if _, err := LizardComplexity(installFakeLizard(t, "stranger"), files); err == nil {

@@ -41,7 +41,8 @@ func TestMain(m *testing.M) {
 // fakeLizard prints what lizard 1.24.0 prints for `--csv` (lizard_ext/csvoutput.py):
 // no header, one row per function, NLOC,CCN,token,PARAM,length,
 // "name@start-end@file","file","name","long_name",start,end. spec gives the CCN
-// of each function per file base name, `a.go=3+2;b.cs=4`.
+// of each function per file base name, `a.go=3+2;b.cs=4`; `ccn:params:length`
+// in place of a CCN sets those too, `a.ts=4:1:30`.
 func fakeLizard(args []string, spec string) int {
 	i := slices.Index(args, "-f")
 	if !slices.Contains(args, "--csv") || i < 0 || i+1 >= len(args) {
@@ -65,9 +66,13 @@ func fakeLizard(args []string, spec string) int {
 		f = strings.TrimRight(f, "\r")
 		for i, n := range ccn[filepath.Base(f)] {
 			name := fmt.Sprintf("f%d", i)
+			params, length := "1", "6"
+			if parts := strings.Split(n, ":"); len(parts) == 3 {
+				n, params, length = parts[0], parts[1], parts[2]
+			}
 			start, end := 10*i+1, 10*i+6
-			fmt.Printf("6,%s,40,1,6,\"%s@%d-%d@%s\",\"%s\",\"%s\",\"%s( x )\",%d,%d\n",
-				n, name, start, end, f, f, name, name, start, end)
+			fmt.Printf("%s,%s,40,%s,%s,\"%s@%d-%d@%s\",\"%s\",\"%s\",\"%s( x )\",%d,%d\n",
+				length, n, params, length, name, start, end, f, f, name, name, start, end)
 		}
 	}
 	return 0

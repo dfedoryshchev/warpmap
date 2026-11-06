@@ -719,7 +719,8 @@ func diffCmd(args []string) int {
 		fmt.Fprintf(os.Stderr, "cannot read baseline %s: %v\n", baseline.Path(dir), err)
 		return 2
 	}
-	d := baseline.Compare(before, baseline.Capture(dir, sourceFiles(dir)))
+	files := sourceFiles(dir)
+	d := baseline.Compare(before, baseline.Capture(dir, files))
 	fmt.Printf("since baseline: edges %+d, cycles %+d, orphans %+d, god-modules %+d\n",
 		d.Edges, d.Cycles, d.Orphans, d.GodModules)
 	if len(d.Worsened) > 0 {
@@ -730,12 +731,59 @@ func diffCmd(args []string) int {
 			fmt.Printf("  +%d  %s\n", c.After-c.Before, c.File)
 		}
 	}
+	printFunctionChanges(dir, before.Functions, files)
 	if d.RiskUp() {
 		fmt.Println("verdict: RISK UP - this change made the codebase harder to work on safely")
 		return 1
 	}
 	fmt.Println("verdict: ok - no net degradation")
 	return 0
+}
+
+// captureFunctions measures each function with lizard when it is on PATH. With
+// no list it says why: lizard is absent, or it failed.
+func captureFunctions(dir string, files []string) ([]baseline.Function, string) {
+	bin, err := exec.LookPath("lizard")
+	if err != nil {
+		return nil, "lizard is not on PATH"
+	}
+	fns, err := baseline.CaptureFunctions(bin, dir, files)
+	if err != nil {
+		return nil, fmt.Sprintf("lizard is on PATH but failed: %v", err)
+	}
+	return fns, ""
+}
+
+const shownFunctions = 10
+
+func printFunctionChanges(dir string, before []baseline.Function, files []string) {
+	if before == nil {
+		fmt.Fprintf(os.Stderr, "per-function: unavailable - the baseline holds no per-function data; `warpmap baseline --force %s` with lizard on PATH takes it\n", dir)
+		return
+	}
+	after, why := captureFunctions(dir, files)
+	if after == nil {
+		fmt.Fprintf(os.Stderr, "per-function: unavailable - %s\n", why)
+		return
+	}
+	changes := baseline.CompareFunctions(before, after)
+	if len(changes) == 0 {
+		return
+	}
+	fmt.Printf("%d functions new or grown:\n", len(changes))
+	for _, c := range changes[:min(shownFunctions, len(changes))] {
+		a := c.After
+		if c.Before == nil {
+			fmt.Printf("  added  %s %s - %d arguments, %d lines, CCN %d\n", a.File, a.Name, a.Params, a.Length, a.CCN)
+			continue
+		}
+		b := c.Before
+		fmt.Printf("  grown  %s %s - arguments %d -> %d, lines %d -> %d, CCN %d -> %d\n",
+			a.File, a.Name, b.Params, a.Params, b.Length, a.Length, b.CCN, a.CCN)
+	}
+	if len(changes) > shownFunctions {
+		fmt.Printf("  and %d more\n", len(changes)-shownFunctions)
+	}
 }
 
 func baselineCmd(args []string) int {
@@ -751,7 +799,12 @@ func baselineCmd(args []string) int {
 			info.ModTime().Format("2006-01-02 15:04"), dir)
 		return 2
 	}
-	snap := baseline.Capture(dir, sourceFiles(dir))
+	files := sourceFiles(dir)
+	snap := baseline.Capture(dir, files)
+	var why string
+	if snap.Functions, why = captureFunctions(dir, files); snap.Functions == nil {
+		fmt.Fprintf(os.Stderr, "per-function: not saved - %s\n", why)
+	}
 	if err := baseline.Save(dir, snap); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

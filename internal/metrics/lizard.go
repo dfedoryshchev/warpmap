@@ -18,12 +18,37 @@ import (
 // file with no functions, or none lizard could read, scores 0.
 func LizardComplexity(bin string, files []string) (map[string]int, error) {
 	cx := make(map[string]int, len(files))
+	for _, f := range files {
+		cx[f] = 0
+	}
+	fns, err := LizardFunctions(bin, files)
+	if err != nil {
+		return nil, err
+	}
+	for _, fn := range fns {
+		cx[fn.File] += fn.CCN
+	}
+	return cx, nil
+}
+
+// Function is one function as lizard measured it.
+type Function struct {
+	File   string // as given to LizardFunctions
+	Name   string
+	NLOC   int // lines of code, comments and blank lines left out
+	CCN    int // cyclomatic complexity
+	Params int
+	Length int // lines from the first to the last
+}
+
+// LizardFunctions runs the lizard executable at bin over files and returns every
+// function it found in them, in the order it printed them.
+func LizardFunctions(bin string, files []string) ([]Function, error) {
 	if len(files) == 0 {
-		return cx, nil
+		return nil, nil
 	}
 	byName := make(map[string]string, len(files))
 	for _, f := range files {
-		cx[f] = 0
 		byName[filepath.Clean(f)] = f
 	}
 
@@ -35,7 +60,8 @@ func LizardComplexity(bin string, files []string) (map[string]int, error) {
 	r := csv.NewReader(bytes.NewReader(out))
 	r.FieldsPerRecord = -1
 	r.LazyQuotes = true
-	rows, matched := 0, 0
+	rows := 0
+	var fns []Function
 	for {
 		rec, err := r.Read()
 		if err == io.EOF {
@@ -47,23 +73,24 @@ func LizardComplexity(bin string, files []string) (map[string]int, error) {
 		if rec[0] == "NLOC" {
 			continue
 		}
-		if len(rec) < 7 {
-			return nil, fmt.Errorf("lizard's csv has %d columns, want at least 7", len(rec))
+		if len(rec) < 8 {
+			return nil, fmt.Errorf("lizard's csv has %d columns, want at least 8", len(rec))
 		}
-		ccn, err := strconv.Atoi(rec[1])
-		if err != nil {
-			return nil, fmt.Errorf("lizard's csv: CCN %q is not a number", rec[1])
+		var n [4]int
+		for i, col := range []int{0, 1, 3, 4} {
+			if n[i], err = strconv.Atoi(rec[col]); err != nil {
+				return nil, fmt.Errorf("lizard's csv: %q in column %d is not a number", rec[col], col+1)
+			}
 		}
 		rows++
 		if f, ok := byName[filepath.Clean(rec[6])]; ok {
-			cx[f] += ccn
-			matched++
+			fns = append(fns, Function{File: f, Name: rec[7], NLOC: n[0], CCN: n[1], Params: n[2], Length: n[3]})
 		}
 	}
-	if rows > 0 && matched == 0 {
+	if rows > 0 && len(fns) == 0 {
 		return nil, errors.New("lizard named none of the files it was given")
 	}
-	return cx, nil
+	return fns, nil
 }
 
 // LizardCSV runs the lizard executable at bin over files and returns what it

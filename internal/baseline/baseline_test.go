@@ -1,6 +1,10 @@
 package baseline
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func snap(c map[string]int) Snapshot { return Snapshot{Complexity: c} }
 
@@ -74,6 +78,45 @@ func TestCompareCountsANewFileAsWorsened(t *testing.T) {
 	}
 	if !d.RiskUp() {
 		t.Fatal("a 200-point file added with nothing else moved passed the gate")
+	}
+}
+
+func TestCompareFunctionsPairsRepeatedNamesInOrder(t *testing.T) {
+	cb := func(ccn, length int) Function {
+		return Function{File: "a.ts", Name: "(anonymous)", CCN: ccn, Length: length}
+	}
+	before := []Function{cb(1, 3), cb(2, 5)}
+	after := []Function{cb(1, 3), cb(2, 9), cb(4, 4)}
+	got := CompareFunctions(before, after)
+	if len(got) != 2 {
+		t.Fatalf("want the second callback grown and a third added, got %+v", got)
+	}
+	if got[0].Before != nil || got[0].After != cb(4, 4) {
+		t.Fatalf("first = %+v, want the added one (highest CCN)", got[0])
+	}
+	if got[1].Before == nil || *got[1].Before != cb(2, 5) || got[1].After != cb(2, 9) {
+		t.Fatalf("second = %+v, want the second callback 5 -> 9 lines", got[1])
+	}
+}
+
+func TestASnapshotWithoutFunctionsLoadsAsUnmeasured(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(Path(dir)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"files":1,"edges":0,"cycles":0,"orphans":0,"godModules":0,"complexity":{"a.ts":3}}`
+	if err := os.WriteFile(Path(dir), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(dir)
+	if err != nil || s.Functions != nil || s.Complexity["a.ts"] != 3 {
+		t.Fatalf("Load = %+v, %v; want the old fields and nil Functions", s, err)
+	}
+	if err := Save(dir, Snapshot{Functions: []Function{}}); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = Load(dir); err != nil || s.Functions == nil {
+		t.Fatalf("a measured snapshot with no functions loaded as unmeasured: %+v, %v", s, err)
 	}
 }
 
