@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Changed
+- `diff` now says `RISK UP` and exits 1 when the change adds dead code. The orphan count was
+  printed on the line above the verdict but never counted in it, so a change that left a file
+  with no importers still read `ok`. It is a net count, and entry points never count as dead
+  code.
+
 ## 0.2.0 - 2026-10-28
 
 ### Added

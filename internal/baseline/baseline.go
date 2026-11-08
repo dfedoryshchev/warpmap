@@ -172,9 +172,33 @@ type Diff struct {
 	Improved   []Change // files whose complexity went down
 }
 
-// RiskUp reports whether the change made the codebase harder to work on safely.
+// Term is one named condition of the verdict.
+type Term struct {
+	Name    string
+	Tripped bool
+}
+
+// Terms lists every condition the verdict is made of, tripped or not. Each term
+// carries its own exception: dead code is counted on net growth, and entry
+// points (see graph.Orphans) never count as dead.
+func (d Diff) Terms() []Term {
+	return []Term{
+		{"cycles", d.Cycles > 0},
+		{"god-modules", d.GodModules > 0},
+		{"complexity", len(d.Worsened) > len(d.Improved)},
+		{"dead-code", d.Orphans > 0},
+	}
+}
+
+// RiskUp reports whether the change made the codebase harder to work on safely:
+// whether any term tripped.
 func (d Diff) RiskUp() bool {
-	return d.Cycles > 0 || d.GodModules > 0 || len(d.Worsened) > len(d.Improved)
+	for _, t := range d.Terms() {
+		if t.Tripped {
+			return true
+		}
+	}
+	return false
 }
 
 func Compare(before, after Snapshot) Diff {

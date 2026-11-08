@@ -58,13 +58,38 @@ func TestRiskUpTerms(t *testing.T) {
 		{"more worsened than improved", Diff{Worsened: one}, true},
 		{"worsened balanced by improved", Diff{Worsened: one, Improved: one}, false},
 		{"more improved than worsened", Diff{Improved: one}, false},
-		{"orphans alone do not trip it", Diff{Orphans: 4}, false},
+		{"new dead code", Diff{Orphans: 1}, true},
+		{"dead code removed", Diff{Orphans: -2}, false},
+		{"dead code removed but a cycle added", Diff{Orphans: -2, Cycles: 1}, true},
 		{"edges alone do not trip it", Diff{Edges: 40}, false},
 	}
 	for _, c := range cases {
 		if got := c.d.RiskUp(); got != c.want {
 			t.Errorf("%s: RiskUp = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestTermsNameWhatTrippedTheGate(t *testing.T) {
+	one := []Change{{"x.ts", 1, 2}}
+	d := Diff{Orphans: 2, GodModules: 1, Worsened: one}
+	var tripped []string
+	for _, term := range d.Terms() {
+		if term.Tripped {
+			tripped = append(tripped, term.Name)
+		}
+	}
+	want := []string{"god-modules", "complexity", "dead-code"}
+	if len(tripped) != len(want) {
+		t.Fatalf("tripped = %v, want %v", tripped, want)
+	}
+	for i := range want {
+		if tripped[i] != want[i] {
+			t.Fatalf("tripped = %v, want %v", tripped, want)
+		}
+	}
+	if len(Diff{}.Terms()) != 4 {
+		t.Fatalf("a quiet diff still lists every term: %+v", Diff{}.Terms())
 	}
 }
 

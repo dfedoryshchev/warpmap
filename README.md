@@ -156,6 +156,11 @@ since baseline: edges +0, cycles +0, orphans +0, god-modules +0
 verdict: RISK UP - this change made the codebase harder to work on safely
 ```
 
+a net degradation is any one of: more import cycles, more god modules, more files that got
+more complex than got simpler, or more dead code (`orphans`, files nothing imports; entry points
+such as `index`, `main`, `app`, `.d.ts` and test files never count). dead code is judged on the
+net count, so deleting one dead file balances adding another.
+
 `diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the exit
 code says which outcome it was:
 

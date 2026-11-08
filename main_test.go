@@ -646,6 +646,20 @@ func TestDiffTellsAMissingBaselineApartFromRiskUp(t *testing.T) {
 	}
 }
 
+func TestDiffFailsWhenAFileLosesItsLastImporter(t *testing.T) {
+	dir := chainProject(t)
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{"--force", dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "b.ts"), []byte("export const b = 2;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, code := diffOutput(t, dir)
+	if !strings.Contains(stdout, "orphans +1") || code != 1 || !strings.Contains(stdout, "verdict: RISK UP") {
+		t.Fatalf("diff after orphaning c.ts exited %d and printed\n%swant orphans +1, a RISK UP verdict and exit 1", code, stdout)
+	}
+}
+
 func diffOutput(t *testing.T, dir string) (stdout, stderr string, code int) {
 	t.Helper()
 	stderr, code = capture(t, &os.Stderr, func() int {
