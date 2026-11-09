@@ -39,14 +39,14 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "usage: warpmap <command> [args]")
 	fmt.Fprintln(w, "commands:")
 	fmt.Fprintln(w, "  analyze <dir>          dependency graph (--json, --dot)")
-	fmt.Fprintln(w, "  hotspots <dir>         rank files by churn x complexity (--months, default 6)")
+	fmt.Fprintln(w, "  hotspots <dir>         rank files by churn x complexity (--months, default 6; --json)")
 	fmt.Fprintln(w, "  trace <dir> <file>     blast radius of a file (--depth)")
 	fmt.Fprintln(w, "  dead <dir>             files nothing imports")
 	fmt.Fprintln(w, "  cycles <dir>           import cycles")
 	fmt.Fprintln(w, "  god <dir>              files with fan-in + fan-out of 20 or more (--all)")
-	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots")
+	fmt.Fprintln(w, "  ownership <dir>        knowledge risk (bus factor) on hotspots (--json)")
 	fmt.Fprintln(w, "  coupling <dir>         files that change together with no import between them (--json)")
-	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius")
+	fmt.Fprintln(w, "  testgap <dir>          untested files ranked by blast radius (--json)")
 	fmt.Fprintln(w, "  report <dir>           full audit, markdown or --json (-o file)")
 	fmt.Fprintln(w, "  dashboard <dir>        hotspot treemap as one html page (-o file)")
 	fmt.Fprintln(w, "  collect <dir> -o <f>   the evidence in one folder you read before sending")
@@ -290,6 +290,7 @@ func monthsFlag(fset *flag.FlagSet) *monthsValue {
 func hotspotsCmd(args []string) int {
 	fset := flag.NewFlagSet("hotspots", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
+	asJSON := fset.Bool("json", false, "print the ranking as json")
 	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
@@ -303,6 +304,24 @@ func hotspotsCmd(args []string) int {
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
+	}
+	if *asJSON {
+		type row struct {
+			File       string  `json:"file"`
+			Score      float64 `json:"score"`
+			Churn      int     `json:"churn"`
+			Complexity int     `json:"complexity"`
+			LOC        int     `json:"loc"`
+		}
+		rows := []row{}
+		for _, h := range ranked[:limit] {
+			rows = append(rows, row{rel(dir, h.File), h.Score, h.Churn, h.Complexity, h.LOC})
+		}
+		writeJSON(os.Stdout, struct {
+			Measure  string `json:"measure"`
+			Hotspots []row  `json:"hotspots"`
+		}{column, rows})
+		return 0
 	}
 	for _, h := range ranked[:limit] {
 		fmt.Printf("%.3f  churn=%-3d %s=%-4d %s\n", h.Score, h.Churn, column, h.Complexity, rel(dir, h.File))
@@ -362,9 +381,13 @@ func relGraph(dir string, g graph.Graph) graph.Graph {
 }
 
 func writeGraphJSON(w io.Writer, dir string, g graph.Graph) error {
+	return writeJSON(w, relGraph(dir, g))
+}
+
+func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(relGraph(dir, g))
+	return enc.Encode(v)
 }
 
 func analyzeCmd(args []string) int {
@@ -503,17 +526,33 @@ func godCmd(args []string) int {
 func testgapCmd(args []string) int {
 	fset := flag.NewFlagSet("testgap", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many to show")
+	asJSON := fset.Bool("json", false, "print the ranking as json")
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
 		fmt.Fprintln(os.Stderr, "usage: warpmap testgap <dir>")
 		return 2
 	}
 	gaps := risk.TestGaps(dir, graph.Build(sourceFiles(dir)))
-	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(gaps))
 	limit := *top
 	if limit > len(gaps) {
 		limit = len(gaps)
 	}
+	if *asJSON {
+		type row struct {
+			File  string `json:"file"`
+			Blast int    `json:"blast"`
+		}
+		rows := []row{}
+		for _, gap := range gaps[:limit] {
+			rows = append(rows, row{rel(dir, gap.File), gap.Blast})
+		}
+		writeJSON(os.Stdout, struct {
+			Untested int   `json:"untested"`
+			Files    []row `json:"files"`
+		}{len(gaps), rows})
+		return 0
+	}
+	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(gaps))
 	for _, gap := range gaps[:limit] {
 		fmt.Printf("  blast=%-4d %s\n", gap.Blast, rel(dir, gap.File))
 	}
@@ -630,6 +669,7 @@ func riskCmd(args []string) int {
 func ownershipCmd(args []string) int {
 	fset := flag.NewFlagSet("ownership", flag.ExitOnError)
 	top := fset.Int("n", 15, "how many hotspots to check")
+	asJSON := fset.Bool("json", false, "print the author counts as json")
 	months := monthsFlag(fset)
 	dir := arg(parseArgs(fset, args), 0)
 	if dir == "" {
@@ -643,6 +683,20 @@ func ownershipCmd(args []string) int {
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
+	}
+	if *asJSON {
+		type row struct {
+			File    string `json:"file"`
+			Authors int    `json:"authors"`
+		}
+		rows := []row{}
+		for _, h := range ranked[:limit] {
+			rows = append(rows, row{rel(dir, h.File), len(metrics.Owners(h.File))})
+		}
+		writeJSON(os.Stdout, struct {
+			Hotspots []row `json:"hotspots"`
+		}{rows})
+		return 0
 	}
 	fmt.Println("hotspots by knowledge spread (bus-factor-1 = only one person has touched it):")
 	for _, h := range ranked[:limit] {
@@ -683,9 +737,7 @@ func couplingCmd(args []string) int {
 	pairs := metrics.HiddenCoupling(dir, files, graph.Build(files), commits)
 	pairs = pairs[:max(0, min(*top, len(pairs)))]
 	if *asJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		enc.Encode(struct {
+		writeJSON(os.Stdout, struct {
 			Pairs []report.Coupled `json:"pairs"`
 		}{report.CoupledPairs(pairs)})
 		return 0

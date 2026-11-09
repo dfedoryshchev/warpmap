@@ -131,5 +131,8 @@ func LizardHotspots(bin, repoDir string, files []string, churn Churn) ([]Hotspot
 	if err != nil {
 		return nil, err
 	}
-	return rank(repoDir, files, churn, func(f string) int { return cx[f] }), nil
+	return rank(repoDir, files, churn, func(f string) (int, int) {
+		own, _ := FileComplexity(f)
+		return cx[f], own.LOC
+	}), nil
 }

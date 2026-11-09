@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Added
+- `hotspots`, `ownership` and `testgap` take `--json`, one shape per command, with
+  project-relative paths. A `hotspots` row carries `loc` beside `complexity`, and the top level
+  names which measure produced the complexity (`cx` or `ccn`)
+
 ### Changed
 - `diff` now says `RISK UP` and exits 1 when the change adds dead code. The orphan count was
   printed on the line above the verdict but never counted in it, so a change that left a file

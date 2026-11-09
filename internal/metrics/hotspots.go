@@ -11,6 +11,7 @@ type Hotspot struct {
 	File       string
 	Churn      int
 	Complexity int
+	LOC        int
 	Score      float64
 }
 
@@ -27,9 +28,9 @@ type Hotspot struct {
 // complexity share alone; multiplying by zero would leave every file at 0 in
 // walk order.
 func Hotspots(repoDir string, files []string, churn Churn) []Hotspot {
-	return rank(repoDir, shipped(repoDir, files), churn, func(f string) int {
+	return rank(repoDir, shipped(repoDir, files), churn, func(f string) (int, int) {
 		cx, _ := FileComplexity(f)
-		return cx.Score
+		return cx.Score, cx.LOC
 	})
 }
 
@@ -44,20 +45,20 @@ func shipped(repoDir string, files []string) []string {
 	return out
 }
 
-func rank(repoDir string, files []string, churn Churn, complexity func(string) int) []Hotspot {
+func rank(repoDir string, files []string, churn Churn, measure func(string) (cx, loc int)) []Hotspot {
 	rows := make([]Hotspot, 0, len(files))
 	maxChurn, maxCx := 0, 1
 	for _, f := range files {
 		rel, _ := filepath.Rel(repoDir, f)
 		c := churn[filepath.ToSlash(rel)]
-		cx := complexity(f)
+		cx, loc := measure(f)
 		if c > maxChurn {
 			maxChurn = c
 		}
 		if cx > maxCx {
 			maxCx = cx
 		}
-		rows = append(rows, Hotspot{File: f, Churn: c, Complexity: cx})
+		rows = append(rows, Hotspot{File: f, Churn: c, Complexity: cx, LOC: loc})
 	}
 	for i := range rows {
 		share := 1.0

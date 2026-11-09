@@ -188,14 +188,17 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 
 **understand**
 - `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz)
-- `hotspots <dir>` - the files that change often AND are complex; start here
+- `hotspots <dir>` - the files that change often AND are complex; start here. `--json` prints
+  `{"measure": "cx" or "ccn", "hotspots": [...]}`, each row the `file`, `score`, `churn`,
+  `complexity` and `loc` (non-blank lines, whichever measure ranked)
 - `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
 - `dead` / `cycles` - orphans, import cycles (one row per set of files that import each other,
   largest first)
 - `god <dir>` - over-central modules: files whose fan-in + fan-out is 20 or more, the same line
   the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
   with an import edge
-- `ownership <dir>` - knowledge risk: hotspots only one person has ever touched
+- `ownership <dir>` - knowledge risk: hotspots only one person has ever touched. `--json`
+  prints `{"hotspots": [...]}`, each row the `file` and its count of `authors`
 - `coupling <dir>` - files that keep changing in the same commits with no import between them
   (`-n`, `--json`, `--months`)
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page
@@ -206,13 +209,18 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
 - `diff <dir>` - did the change make the codebase better or worse? exits 1 on regression, 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
-- `testgap <dir>` - untested files, ranked by how much depends on them
+- `testgap <dir>` - untested files, ranked by how much depends on them. `--json` prints
+  `{"untested": <count>, "files": [...]}`, each row the `file` and its `blast`
 
 **work with agents**
 - `brief <dir> <file>` - a context pack to hand an agent before it touches a file
 - `explain <dir>` - deprecated, removed in 0.3.0; `brief` and `mcp` give an agent the same
   facts to narrate
 - `mcp` - run as an MCP server so an agent can query the risk map live
+
+json from `hotspots`, `ownership` and `testgap` names files the way their text does, relative to
+the analysed directory with forward slashes; `-n` caps the list, and a project with nothing to
+rank prints an empty list rather than `null`. the stderr notes stay on stderr, so stdout parses.
 
 multi-language: the import graph, and every command built on it, reads TypeScript / JavaScript /
 Python today. `hotspots` and `ownership` also rank Go, C#, Java, Ruby, Rust, PHP, Swift, Kotlin,

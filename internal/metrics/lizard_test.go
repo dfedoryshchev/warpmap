@@ -161,3 +161,25 @@ func TestLizardHotspotsRankByLizardsNumbers(t *testing.T) {
 		t.Fatalf("ranked %q, want %q", strings.Join(got, " "), want)
 	}
 }
+
+func TestHotspotsKeepEachFilesLineCountWhicheverMeasureRanked(t *testing.T) {
+	dir := t.TempDir()
+	files := writeFiles(t, dir, map[string]string{
+		"a.go": "package a\n",
+		"b.go": "package b\n\n" + strings.Repeat("if x { y() }\n", 30),
+	})
+	churn := Churn{"a.go": 2, "b.go": 2}
+	lizard, err := LizardHotspots(installFakeLizard(t, "a.go=9;b.go=1"), dir, files, churn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, ranked := range map[string][]Hotspot{"internal": Hotspots(dir, files, churn), "lizard": lizard} {
+		got := map[string]int{}
+		for _, h := range ranked {
+			got[filepath.Base(h.File)] = h.LOC
+		}
+		if got["a.go"] != 1 || got["b.go"] != 31 {
+			t.Fatalf("%s: loc = %v, want a.go=1 b.go=31 (non-blank lines)", name, got)
+		}
+	}
+}
