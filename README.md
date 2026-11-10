@@ -291,6 +291,32 @@ is normalised churn times normalised complexity, which is heavily skewed: on a r
 almost every file sits below 0.05, so a linear ramp paints one box red and everything else
 white. the square root spreads that crowded low end without reordering anything.
 
+### reading the map
+
+- **colour never outruns size.** the score is churn share times complexity share, so no file
+  scores more than its complexity over the largest file's. a small box is never dark; a dark box
+  is always one of the larger ones.
+- **a large pale box is complex code that is quiet.** a box whose hover reads score `0.000` changed
+  in no commit inside the churn window (`--months`, 6 by default). they are where
+  a change is expensive but not where changes keep happening.
+- **the colours are relative.** the darkest box is the top of the ranking, but it is full red only
+  when the most-changed file is also the most complex one; otherwise the top score sits below
+  `1.000` and the whole map reads paler. scale is set by this project in this window, so two
+  maps, of two projects or of one project a month apart, do not compare colour for colour.
+  compare the ranks in the table instead.
+- **no churn at all, no colour signal.** with no git, or no commit in the window that touched a
+  ranked file, every score is the complexity share alone, so the colour repeats the size. the
+  churn line on stderr says when that happened.
+- **a directory's area is the sum of its files.** a big frame is a lot of code, not a lot of risk;
+  the risk is in the colour of what it holds. a frame too small to keep a header strip hands all
+  its space to its files and shows no name.
+- **tests are not on the map.** the header reads `<files> files, <edges> import edges, <n> ranked`:
+  the first count is every source file in the graph, the last is the ones on the map, and the
+  difference is the test files, left out for the same reason `hotspots` leaves them out.
+- **hover is the only interaction.** a file's name is cut short with `..` to fit its box, and left
+  off a box too small to hold it; hovering any box, file or directory, shows its full path as the
+  browser's own tooltip. nothing on the page is a link or responds to a click.
+
 the page is one file, and there is nothing in it but markup, css and inline svg. the layout
 is computed before the file is written, so there is no javascript, no web font and no request
 of any kind: it renders identically on a machine with no network, and it can be mailed or
