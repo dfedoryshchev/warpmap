@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/dfedoryshchev/warpmap/internal/coverage"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 )
@@ -170,6 +171,7 @@ type Diff struct {
 	GodModules int
 	Worsened   []Change // files whose complexity went up
 	Improved   []Change // files whose complexity went down
+	TestsGrew  []Change // test files whose complexity went up; never part of the verdict
 }
 
 // Term is one named condition of the verdict.
@@ -179,8 +181,8 @@ type Term struct {
 }
 
 // Terms lists every condition the verdict is made of, tripped or not. Each term
-// carries its own exception: dead code is counted on net growth, and entry
-// points (see graph.Orphans) never count as dead.
+// carries its own exception: complexity leaves test files out, dead code is
+// counted on net growth, and entry points (see graph.Orphans) never count as dead.
 func (d Diff) Terms() []Term {
 	return []Term{
 		{"cycles", d.Cycles > 0},
@@ -211,6 +213,10 @@ func Compare(before, after Snapshot) Diff {
 	for f, a := range after.Complexity {
 		b := before.Complexity[f]
 		switch {
+		case coverage.IsTest(f):
+			if a > b {
+				d.TestsGrew = append(d.TestsGrew, Change{f, b, a})
+			}
 		case a > b:
 			d.Worsened = append(d.Worsened, Change{f, b, a})
 		case a < b:
@@ -222,6 +228,9 @@ func Compare(before, after Snapshot) Diff {
 	})
 	sort.Slice(d.Improved, func(i, j int) bool {
 		return d.Improved[i].Before-d.Improved[i].After > d.Improved[j].Before-d.Improved[j].After
+	})
+	sort.Slice(d.TestsGrew, func(i, j int) bool {
+		return d.TestsGrew[i].After-d.TestsGrew[i].Before > d.TestsGrew[j].After-d.TestsGrew[j].Before
 	})
 	return d
 }

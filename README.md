@@ -161,6 +161,11 @@ more complex than got simpler, or more dead code (`orphans`, files nothing impor
 such as `index`, `main`, `app`, `.d.ts` and test files never count). dead code is judged on the
 net count, so deleting one dead file balances adding another.
 
+test files (the ones `testgap` treats as tests) are left out of the complexity count both ways, so
+adding or growing tests cannot fail the gate. `diff` prints them on a line of their own,
+`3 test files grew (not part of the verdict)`, and a snapshot saved by an earlier version needs no
+re-baseline for this.
+
 `diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the exit
 code says which outcome it was:
 

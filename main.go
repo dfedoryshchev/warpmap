@@ -783,6 +783,11 @@ func diffCmd(args []string) int {
 			fmt.Printf("  +%d  %s\n", c.After-c.Before, c.File)
 		}
 	}
+	if n := len(d.TestsGrew); n == 1 {
+		fmt.Println("1 test file grew (not part of the verdict)")
+	} else if n > 1 {
+		fmt.Printf("%d test files grew (not part of the verdict)\n", n)
+	}
 	printFunctionChanges(dir, before.Functions, files)
 	if d.RiskUp() {
 		fmt.Println("verdict: RISK UP - this change made the codebase harder to work on safely")

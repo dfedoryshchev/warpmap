@@ -145,6 +145,41 @@ func TestASnapshotWithoutFunctionsLoadsAsUnmeasured(t *testing.T) {
 	}
 }
 
+func TestCompareKeepsTestFilesOutOfTheComplexityTerm(t *testing.T) {
+	d := Compare(
+		snap(map[string]int{"src/a.ts": 10, "src/a.test.ts": 10, "tests/setup.ts": 5, "src/b.spec.ts": 40}),
+		snap(map[string]int{"src/a.ts": 10, "src/a.test.ts": 90, "tests/setup.ts": 9, "src/b.spec.ts": 20, "src/c.test.ts": 30}),
+	)
+	if len(d.Worsened) != 0 || len(d.Improved) != 0 {
+		t.Fatalf("worsened = %+v, improved = %+v; want test files in neither", d.Worsened, d.Improved)
+	}
+	want := []Change{{"src/a.test.ts", 10, 90}, {"src/c.test.ts", 0, 30}, {"tests/setup.ts", 5, 9}}
+	if len(d.TestsGrew) != len(want) {
+		t.Fatalf("tests grew = %+v, want %+v", d.TestsGrew, want)
+	}
+	for i := range want {
+		if d.TestsGrew[i] != want[i] {
+			t.Fatalf("tests grew = %+v, want %+v", d.TestsGrew, want)
+		}
+	}
+	if d.RiskUp() {
+		t.Fatal("growing only test files tripped the gate")
+	}
+}
+
+func TestCompareStillTripsOnASourceFileNextToGrowingTests(t *testing.T) {
+	d := Compare(
+		snap(map[string]int{"src/a.ts": 10, "src/a.test.ts": 10}),
+		snap(map[string]int{"src/a.ts": 25, "src/a.test.ts": 90}),
+	)
+	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"src/a.ts", 10, 25}) {
+		t.Fatalf("worsened = %+v", d.Worsened)
+	}
+	if !d.RiskUp() {
+		t.Fatal("a source file grew and the gate passed")
+	}
+}
+
 func TestCompareIgnoresAnEmptyNewFileAndARemovedFile(t *testing.T) {
 	d := Compare(
 		snap(map[string]int{"old.ts": 10, "gone.ts": 30}),

@@ -660,6 +660,40 @@ func TestDiffFailsWhenAFileLosesItsLastImporter(t *testing.T) {
 	}
 }
 
+func TestDiffPassesWhenOnlyATestFileGrows(t *testing.T) {
+	dir := chainProject(t)
+	writeFiles(t, dir, map[string]string{
+		"src/c.test.ts": "import { c } from \"./c\";\ntest(\"c\", () => expect(c).toBe(1));\n",
+	})
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	writeFiles(t, dir, map[string]string{
+		"src/c.test.ts": "import { c } from \"./c\";\n" +
+			"test(\"c\", () => expect(c).toBe(1));\n" +
+			"test(\"c is set\", () => { if (c) { expect(c > 0 && c < 2).toBe(true); } });\n" +
+			"test(\"c is one\", () => { for (const x of [c]) { if (x !== 1) { throw new Error(\"no\"); } } });\n",
+	})
+	stdout, _, code := diffOutput(t, dir)
+	if code != 0 || !strings.Contains(stdout, "verdict: ok") {
+		t.Fatalf("diff after growing only a test exited %d and printed\n%swant 0 and an ok verdict", code, stdout)
+	}
+	if !strings.Contains(stdout, "1 test file grew") {
+		t.Errorf("diff did not say a test file grew:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "got more complex") {
+		t.Errorf("diff listed a test file as more complex:\n%s", stdout)
+	}
+
+	writeFiles(t, dir, map[string]string{
+		"src/c.ts": "export const c = 1;\nexport function f(x: number) { if (x > 1 && x < 9) { return x; } return 0; }\n",
+	})
+	stdout, _, code = diffOutput(t, dir)
+	if code != 1 || !strings.Contains(stdout, "verdict: RISK UP") || !strings.Contains(stdout, "src/c.ts") {
+		t.Fatalf("diff after growing src/c.ts exited %d and printed\n%swant 1, src/c.ts named and a RISK UP verdict", code, stdout)
+	}
+}
+
 func diffOutput(t *testing.T, dir string) (stdout, stderr string, code int) {
 	t.Helper()
 	stderr, code = capture(t, &os.Stderr, func() int {
