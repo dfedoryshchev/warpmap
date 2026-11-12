@@ -210,8 +210,25 @@ func Compare(before, after Snapshot) Diff {
 		Orphans:    after.Orphans - before.Orphans,
 		GodModules: after.GodModules - before.GodModules,
 	}
+	// the snapshot keys files by path, so a file moved unchanged would read as one
+	// removed and one added; a removed file and an added one of the same kind and
+	// score pair off as a move instead.
+	type gone struct {
+		test  bool
+		score int
+	}
+	removed := map[gone]int{}
+	for f, b := range before.Complexity {
+		if _, ok := after.Complexity[f]; !ok {
+			removed[gone{coverage.IsTest(f), b}]++
+		}
+	}
 	for f, a := range after.Complexity {
-		b := before.Complexity[f]
+		b, ok := before.Complexity[f]
+		if k := (gone{coverage.IsTest(f), a}); !ok && removed[k] > 0 {
+			removed[k]--
+			continue
+		}
 		switch {
 		case coverage.IsTest(f):
 			if a > b {

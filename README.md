@@ -166,6 +166,10 @@ adding or growing tests cannot fail the gate. `diff` prints them on a line of th
 `3 test files grew (not part of the verdict)`, and a snapshot saved by an earlier version needs no
 re-baseline for this.
 
+a file that is new since the baseline counts as more complex, and a removed one counts neither
+way. a file moved or renamed without changing its score is neither: a removed file and a new one
+with the same score pair off as one file that moved. a file that moved and grew counts as new.
+
 `diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the exit
 code says which outcome it was:
 

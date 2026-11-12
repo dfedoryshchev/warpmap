@@ -22,6 +22,9 @@ All notable changes to this project are documented in this file.
 - `diff` no longer counts a test file that grew as the code getting worse. Test files are left
   out of the complexity term and printed on their own line (`N test files grew`), so adding tests
   cannot trip `RISK UP`
+- `diff` no longer says `RISK UP` when a file is only moved or renamed. The snapshot keys files by
+  path, so the moved file read as a new one and tripped the complexity term; a removed file and a
+  new one with the same score now pair off as a move
 
 ## 0.2.0 - 2026-10-28
 

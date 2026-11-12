@@ -189,3 +189,23 @@ func TestCompareIgnoresAnEmptyNewFileAndARemovedFile(t *testing.T) {
 		t.Fatalf("diff = %+v", d)
 	}
 }
+
+func TestCompareTakesAFileThatMovedAsMoved(t *testing.T) {
+	d := Compare(
+		snap(map[string]int{"src/a.ts": 10, "src/d.ts": 12, "src/d.test.ts": 7}),
+		snap(map[string]int{"src/a.ts": 10, "src/lib/d.ts": 12, "src/lib/d.test.ts": 7}),
+	)
+	if len(d.Worsened) != 0 || len(d.TestsGrew) != 0 || d.RiskUp() {
+		t.Fatalf("moving two files unchanged read as adding them: %+v", d)
+	}
+}
+
+func TestCompareStillCountsAFileThatMovedAndGrew(t *testing.T) {
+	d := Compare(
+		snap(map[string]int{"src/d.ts": 12}),
+		snap(map[string]int{"src/lib/d.ts": 20}),
+	)
+	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"src/lib/d.ts", 0, 20}) || !d.RiskUp() {
+		t.Fatalf("diff = %+v", d)
+	}
+}
