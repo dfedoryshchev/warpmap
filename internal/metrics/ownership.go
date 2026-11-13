@@ -19,10 +19,75 @@ import (
 // %aE apply the repo's .mailmap, then commits that share an email or a name
 // (ignoring case) are the same person, named by the spelling they used most.
 func Owners(file string) []string {
+	owners := Ownership(file)
+	names := make([]string, len(owners))
+	for i, o := range owners {
+		names[i] = o.Name
+	}
+	return names
+}
+
+// Owner is one person and how many commits they made.
+type Owner struct {
+	Name    string
+	Commits int
+}
+
+// Ownership is Owners with each person's commit count.
+func Ownership(file string) []Owner {
 	out, err := gitcmd.Command(filepath.Dir(file), "log", "--no-ext-diff", "--no-textconv", "--format=%aN%x00%aE", "--", filepath.Base(file)).Output()
 	if err != nil {
 		return nil
 	}
+	var ids []identity
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		name, email, _ := strings.Cut(line, "\x00")
+		ids = append(ids, identity{name, email})
+	}
+	return people(ids)
+}
+
+// Authors is the people behind commits, most commits first, one person counted
+// once the way Owners counts them.
+func Authors(commits []Commit) []Owner {
+	ids := make([]identity, len(commits))
+	for i, c := range commits {
+		ids[i] = identity{c.Name, c.Email}
+	}
+	return people(ids)
+}
+
+// Held is a file one person made more than half the commits to.
+type Held struct {
+	File    string
+	Author  string
+	Commits int
+	Total   int
+}
+
+// HeldByOne keeps, in the order given, the files whose leading author made more
+// than half of their commits across the file's whole history.
+func HeldByOne(files []string) []Held {
+	var held []Held
+	for _, f := range files {
+		owners := Ownership(f)
+		if len(owners) == 0 {
+			continue
+		}
+		total := 0
+		for _, o := range owners {
+			total += o.Commits
+		}
+		if lead := owners[0]; lead.Commits*2 > total {
+			held = append(held, Held{File: f, Author: lead.Name, Commits: lead.Commits, Total: total})
+		}
+	}
+	return held
+}
+
+type identity struct{ name, email string }
+
+func people(ids []identity) []Owner {
 	parent := map[string]string{}
 	find := func(k string) string {
 		for parent[k] != k {
@@ -42,9 +107,8 @@ func Owners(file string) []string {
 
 	type commit struct{ name, key string }
 	var commits []commit
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		name, email, _ := strings.Cut(line, "\x00")
-		name, email = strings.TrimSpace(name), strings.ToLower(strings.TrimSpace(email))
+	for _, id := range ids {
+		name, email := strings.TrimSpace(id.name), strings.ToLower(strings.TrimSpace(id.email))
 		if name == "" && email == "" {
 			continue
 		}
@@ -79,9 +143,9 @@ func Owners(file string) []string {
 		}
 	}
 	sort.SliceStable(order, func(i, j int) bool { return counts[order[i]] > counts[order[j]] })
-	owners := make([]string, len(order))
+	owners := make([]Owner, len(order))
 	for i, p := range order {
-		owners[i] = names[p]
+		owners[i] = Owner{Name: names[p], Commits: counts[p]}
 	}
 	return owners
 }

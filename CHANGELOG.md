@@ -11,8 +11,14 @@ All notable changes to this project are documented in this file.
 - README: how to read the dashboard - what colour can and cannot say next to size, why its
   scale does not compare across projects or runs, what a directory's area is, and that tests
   are left off the map
+- `report` leads with the hotspots one person holds: of the top ten, the files whose leading
+  author made more than half of the commits, with that person's share. The json carries the same
+  rows as `held_by_one`, and `window_authors`
 
 ### Changed
+- `ownership` prints one line, `one author across the window: every file has a bus factor of 1`,
+  instead of a row per file when one person made every commit in the window; `report` says the
+  same in its lead signals. `ownership --json` keeps every row and adds `window_authors`
 - `diff` now says `RISK UP` and exits 1 when the change adds dead code. The orphan count was
   printed on the line above the verdict but never counted in it, so a change that left a file
   with no importers still read `ok`. It is a net count, and entry points never count as dead

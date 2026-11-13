@@ -677,9 +677,10 @@ func ownershipCmd(args []string) int {
 		return 2
 	}
 	files := rankedFiles(dir)
-	churn, window := metrics.ProjectChurn(dir, files, int(*months))
-	ranked, _ := rankHotspots(dir, files, churn)
+	commits, window := metrics.ProjectCommits(dir, files, int(*months))
+	ranked, _ := rankHotspots(dir, files, metrics.ChurnOf(commits))
 	fmt.Fprintln(os.Stderr, window.Note(ranked))
+	authors := len(metrics.Authors(commits))
 	limit := *top
 	if limit > len(ranked) {
 		limit = len(ranked)
@@ -694,8 +695,13 @@ func ownershipCmd(args []string) int {
 			rows = append(rows, row{rel(dir, h.File), len(metrics.Owners(h.File))})
 		}
 		writeJSON(os.Stdout, struct {
-			Hotspots []row `json:"hotspots"`
-		}{rows})
+			WindowAuthors int   `json:"window_authors"`
+			Hotspots      []row `json:"hotspots"`
+		}{authors, rows})
+		return 0
+	}
+	if authors == 1 {
+		fmt.Println(report.OneAuthor)
 		return 0
 	}
 	fmt.Println("hotspots by knowledge spread (bus-factor-1 = only one person has touched it):")

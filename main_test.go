@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -779,27 +780,13 @@ func TestOwnershipCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
 	git("add", "--", "src")
 	git("commit", "-m", "add the chain")
 
-	run := func(project string) []string {
-		t.Helper()
-		out, code := captureStdout(t, func() int { return ownershipCmd([]string{project}) })
-		if code != 0 {
-			t.Fatalf("ownership %s exited %d", project, code)
-		}
-		lines := strings.Split(strings.TrimSpace(out), "\n")[1:]
-		sort.Strings(lines)
-		return lines
-	}
-	want := []string{
-		"  authors=1  src/a.ts  <- bus factor 1",
-		"  authors=1  src/b.ts  <- bus factor 1",
-		"  authors=1  src/c.ts  <- bus factor 1",
-	}
-	if got := run(dir); !slices.Equal(got, want) {
-		t.Fatalf("ownership <absolute> printed %q, want %q", got, want)
+	want := map[string]int{"src/a.ts": 1, "src/b.ts": 1, "src/c.ts": 1}
+	if got := authorCounts(t, dir); !maps.Equal(got, want) {
+		t.Fatalf("ownership <absolute> counted %v, want %v", got, want)
 	}
 	t.Chdir(filepath.Dir(dir))
-	if got := run(filepath.Base(dir)); !slices.Equal(got, want) {
-		t.Fatalf("ownership <relative> printed %q, want %q", got, want)
+	if got := authorCounts(t, filepath.Base(dir)); !maps.Equal(got, want) {
+		t.Fatalf("ownership <relative> counted %v, want %v", got, want)
 	}
 }
 

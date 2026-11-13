@@ -204,13 +204,10 @@ func TestHotspotsAndOwnershipAskEachRepo(t *testing.T) {
 				t.Errorf("hotspots %s: want churn=1 for %s, got %q in\n%s", tc.dir, f, line, out)
 			}
 		}
-		out, code = captureStdout(t, func() int { return ownershipCmd([]string{tc.dir}) })
-		if code != 0 {
-			t.Fatalf("ownership %s exited %d", tc.dir, code)
-		}
+		counts := authorCounts(t, tc.dir)
 		for _, f := range tc.want {
-			if line := lineFor(out, f); !strings.Contains(line, "authors=1 ") {
-				t.Errorf("ownership %s: want authors=1 for %s, got %q in\n%s", tc.dir, f, line, out)
+			if counts[f] != 1 {
+				t.Errorf("ownership %s: want authors=1 for %s, got %v", tc.dir, f, counts)
 			}
 		}
 	}

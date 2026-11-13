@@ -73,10 +73,12 @@ func normalizeRename(p string) string {
 	return strings.ReplaceAll(p, "//", "/")
 }
 
-// Commit is one commit in the window: its hash and the files it changed, keyed
-// as Churn keys them.
+// Commit is one commit in the window: its hash, its author after the repo's
+// .mailmap, and the files it changed, keyed as Churn keys them.
 type Commit struct {
 	Hash  string
+	Name  string
+	Email string
 	Files []string
 }
 
@@ -90,14 +92,18 @@ const commitMark = "\x00"
 func GitCommits(dir string, windowMonths int) ([]Commit, error) {
 	since := fmt.Sprintf("%d months ago", windowMonths)
 	out, err := gitcmd.Command(dir, "log", "--since", since, "--no-merges", "--no-ext-diff", "--no-textconv",
-		"--relative", "--numstat", "--format=%x00%H", "--", ".").Output()
+		"--relative", "--numstat", "--format=%x00%H%x00%aN%x00%aE", "--", ".").Output()
 	if err != nil {
 		return nil, err
 	}
 	var commits []Commit
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(line, commitMark) {
-			commits = append(commits, Commit{Hash: strings.TrimSpace(line[len(commitMark):])})
+			fields := strings.SplitN(strings.TrimRight(line[len(commitMark):], "\r"), commitMark, 3)
+			for len(fields) < 3 {
+				fields = append(fields, "")
+			}
+			commits = append(commits, Commit{Hash: strings.TrimSpace(fields[0]), Name: fields[1], Email: fields[2]})
 			continue
 		}
 		parts := strings.Split(line, "\t")

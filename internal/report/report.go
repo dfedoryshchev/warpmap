@@ -23,20 +23,37 @@ type Report struct {
 	Coupling []metrics.Pair
 	Hotspots []metrics.Hotspot
 	Findings []Finding
+	// Authors is how many people made the commits in the window.
+	Authors int
+	Held    []metrics.Held
 }
 
+// OneAuthor is what the report and `warpmap ownership` say instead of listing
+// every hotspot when one person made every commit in the window.
+const OneAuthor = "one author across the window: every file has a bus factor of 1"
+
 // Build runs the analyses and assembles a report for a project. commits is the
-// history churn was counted from; the coupled pairs come from it.
+// history churn was counted from; the coupled pairs and the author count come
+// from it.
 func Build(dir string, files []string, churn metrics.Churn, commits []metrics.Commit) Report {
 	g := graph.Build(files)
-	return Report{
+	r := Report{
 		Dir:      dir,
 		Files:    len(g.Files),
 		Edges:    len(g.Edges),
 		Coupling: metrics.HiddenCoupling(dir, files, g, commits),
 		Hotspots: metrics.Hotspots(dir, files, churn),
 		Findings: Findings(g, dir),
+		Authors:  len(metrics.Authors(commits)),
 	}
+	if r.Authors != 1 {
+		var checked []string
+		for _, h := range top(r.Hotspots, topHotspots) {
+			checked = append(checked, h.File)
+		}
+		r.Held = metrics.HeldByOne(checked)
+	}
+	return r
 }
 
 func topCoupled(p []metrics.Pair) []metrics.Pair {
@@ -68,6 +85,20 @@ func (r Report) Markdown() string {
 	}
 	b.WriteString("\n")
 
+	b.WriteString("### hotspots one person holds\n\n")
+	fmt.Fprintf(&b, "Of the top %d hotspots, the files whose leading author made more than half of the commits across the file's whole history.\n\n", topHotspots)
+	switch {
+	case r.Authors == 1:
+		b.WriteString("- " + OneAuthor + "\n")
+	case len(r.Held) == 0:
+		b.WriteString("- none\n")
+	}
+	for _, h := range r.Held {
+		fmt.Fprintf(&b, "- `%s` - %s made %d of its %d commits (%.0f%%)\n",
+			relPath(r.Dir, h.File), h.Author, h.Commits, h.Total, 100*share(h))
+	}
+	b.WriteString("\n")
+
 	if len(r.Findings) > 0 {
 		b.WriteString("## findings\n\n")
 		for _, f := range r.Findings {
@@ -85,11 +116,25 @@ func (r Report) Markdown() string {
 }
 
 type pack struct {
-	Files    int       `json:"files"`
-	Edges    int       `json:"edges"`
-	Coupling []Coupled `json:"coupling"`
-	Findings []Finding `json:"findings"`
-	Hotspots []ranked  `json:"hotspots"`
+	Files         int       `json:"files"`
+	Edges         int       `json:"edges"`
+	Coupling      []Coupled `json:"coupling"`
+	WindowAuthors int       `json:"window_authors"`
+	HeldByOne     []held    `json:"held_by_one"`
+	Findings      []Finding `json:"findings"`
+	Hotspots      []ranked  `json:"hotspots"`
+}
+
+type held struct {
+	File    string  `json:"file"`
+	Author  string  `json:"author"`
+	Commits int     `json:"commits"`
+	Total   int     `json:"total"`
+	Share   float64 `json:"share"`
+}
+
+func share(h metrics.Held) float64 {
+	return float64(h.Commits) / float64(h.Total)
 }
 
 // Coupled is one pair of files that change together, as the evidence pack and
@@ -126,11 +171,16 @@ func (r Report) JSON() ([]byte, error) {
 	// a project with nothing to say still answers with lists, so a consumer
 	// iterating the pack never has to special-case null.
 	p := pack{
-		Files:    r.Files,
-		Edges:    r.Edges,
-		Coupling: CoupledPairs(topCoupled(r.Coupling)),
-		Findings: []Finding{},
-		Hotspots: []ranked{},
+		Files:         r.Files,
+		Edges:         r.Edges,
+		WindowAuthors: r.Authors,
+		Coupling:      CoupledPairs(topCoupled(r.Coupling)),
+		HeldByOne:     []held{},
+		Findings:      []Finding{},
+		Hotspots:      []ranked{},
+	}
+	for _, h := range r.Held {
+		p.HeldByOne = append(p.HeldByOne, held{File: relPath(r.Dir, h.File), Author: h.Author, Commits: h.Commits, Total: h.Total, Share: share(h)})
 	}
 	p.Findings = append(p.Findings, r.Findings...)
 	for _, h := range top(r.Hotspots, topHotspots) {

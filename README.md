@@ -136,10 +136,19 @@ every other command names them, so the document and the json agree file for file
 carries a path off the machine that ran the audit. `findings` and `hotspots` are always
 lists, empty ones included, so nothing has to special-case a project with nothing to report.
 
-the report opens with its lead signals, above the findings: the files that keep changing together
-with no import between them ([below](#files-that-change-together)), up to ten pairs. in the json
-they are `coupling`, a list like the other two, each pair with `a`, `b`, `together`, `changes_a`,
-`changes_b` and `score`.
+the report opens with its lead signals, above the findings. first, the files that keep changing
+together with no import between them ([below](#files-that-change-together)), up to ten pairs. in
+the json they are `coupling`, a list like the other two, each pair with `a`, `b`, `together`,
+`changes_a`, `changes_b` and `score`.
+
+second, the hotspots one person holds: of the top ten, the files whose leading author made more
+than half of the file's commits, with that person's share
+(`` `src/form.ts` - Ada made 7 of its 9 commits (78%) ``). the share counts the file's whole
+history, the way `ownership` counts authors. when every commit in the churn window (`--months`)
+comes from one person, the section says so in one line instead,
+`one author across the window: every file has a bus factor of 1`. in the json, `window_authors`
+is the number of people in the window and `held_by_one` lists the same rows, each with `file`,
+`author`, `commits`, `total` and `share` (0 to 1); it is empty when the window holds one author.
 
 ### then keep it from getting worse
 
@@ -206,8 +215,10 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `god <dir>` - over-central modules: files whose fan-in + fan-out is 20 or more, the same line
   the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
   with an import edge
-- `ownership <dir>` - knowledge risk: hotspots only one person has ever touched. `--json`
-  prints `{"hotspots": [...]}`, each row the `file` and its count of `authors`
+- `ownership <dir>` - knowledge risk: hotspots only one person has ever touched. when every
+  commit in the window comes from one person it prints that one line instead of a row per file.
+  `--json` prints `{"window_authors": <count>, "hotspots": [...]}`, each row the `file` and its
+  count of `authors`, every row kept whatever the window holds
 - `coupling <dir>` - files that keep changing in the same commits with no import between them
   (`-n`, `--json`, `--months`)
 - `dashboard <dir>` - the hotspot ranking as a treemap on one html page

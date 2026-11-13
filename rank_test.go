@@ -195,13 +195,9 @@ func TestHotspotsAndOwnershipRankEveryCommonLanguage(t *testing.T) {
 		t.Fatalf("hotspots ranked\n%q\nwant\n%q", got, want)
 	}
 
-	out, code = captureStdout(t, func() int { return ownershipCmd([]string{dir, "-n", "50"}) })
-	if code != 0 {
-		t.Fatalf("ownership exited %d", code)
-	}
 	var owned []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n")[1:] {
-		owned = append(owned, strings.Fields(line)[1])
+	for f := range authorCounts(t, dir, "-n", "50") {
+		owned = append(owned, f)
 	}
 	sort.Strings(owned)
 	if !slices.Equal(owned, want) {
