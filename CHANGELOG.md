@@ -31,6 +31,10 @@ All notable changes to this project are documented in this file.
 - `diff` no longer says `RISK UP` when a file is only moved or renamed. The snapshot keys files by
   path, so the moved file read as a new one and tripped the complexity term; a removed file and a
   new one with the same score now pair off as a move
+- `trace` and `diff` print the same output on every run of the same tree. `trace` lists the
+  dependents in path order; `diff` breaks ties between files that moved by the same amount on
+  the path, and pairs a moved file the same way each time, so the Action no longer re-posts a
+  changed comment for an unchanged pull request
 
 ## 0.2.0 - 2026-10-28
 

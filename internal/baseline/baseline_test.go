@@ -1,8 +1,10 @@
 package baseline
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -27,6 +29,41 @@ func TestCompareSplitsWorsenedAndImproved(t *testing.T) {
 	}
 	if len(d.Improved) != 1 || d.Improved[0] != (Change{"b.ts", 10, 4}) {
 		t.Fatalf("improved = %+v", d.Improved)
+	}
+}
+
+// the Action posts what diff prints and re-posts when it changes, so files that
+// moved by the same amount print in path order on every run, and a removed file
+// pairs with the same added one each time.
+func TestCompareIsTheSameOnEveryRun(t *testing.T) {
+	before, after := map[string]int{"gone.ts": 5}, map[string]int{"m1.ts": 5, "m2.ts": 5}
+	for i := 0; i < 20; i++ {
+		before[fmt.Sprintf("up%02d.ts", i)] = 1
+		after[fmt.Sprintf("up%02d.ts", i)] = 4
+		before[fmt.Sprintf("down%02d.ts", i)] = 9
+		after[fmt.Sprintf("down%02d.ts", i)] = 2
+		before[fmt.Sprintf("t%02d.test.ts", i)] = 1
+		after[fmt.Sprintf("t%02d.test.ts", i)] = 6
+	}
+	paths := func(cs []Change) []string {
+		var out []string
+		for _, c := range cs {
+			out = append(out, c.File)
+		}
+		return out
+	}
+	for run := 0; run < 20; run++ {
+		d := Compare(snap(before), snap(after))
+		worsened := paths(d.Worsened)
+		if worsened[0] != "m2.ts" || !slices.IsSorted(worsened[1:]) || len(worsened) != 21 {
+			t.Fatalf("run %d: want m2.ts (the larger move) then the ties in path order, got %v", run, worsened)
+		}
+		if got := paths(d.Improved); !slices.IsSorted(got) || len(got) != 20 {
+			t.Fatalf("run %d: improved ties not in path order: %v", run, got)
+		}
+		if got := paths(d.TestsGrew); !slices.IsSorted(got) || len(got) != 20 {
+			t.Fatalf("run %d: test-file ties not in path order: %v", run, got)
+		}
 	}
 }
 

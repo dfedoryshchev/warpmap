@@ -1,6 +1,10 @@
 package trace
 
-import "github.com/dfedoryshchev/warpmap/internal/graph"
+import (
+	"sort"
+
+	"github.com/dfedoryshchev/warpmap/internal/graph"
+)
 
 func reverseIndex(g graph.Graph) map[string][]string {
 	rev := map[string][]string{}
@@ -12,7 +16,7 @@ func reverseIndex(g graph.Graph) map[string][]string {
 
 // BlastRadius returns everything that transitively depends on file - the set of
 // files a change to it could ripple into. maxDepth caps how many import hops out to
-// walk; maxDepth <= 0 walks the whole cone.
+// walk; maxDepth <= 0 walks the whole cone. The files come back in path order.
 func BlastRadius(g graph.Graph, file string, maxDepth int) []string {
 	rev := reverseIndex(g)
 	seen := map[string]bool{}
@@ -33,5 +37,6 @@ func BlastRadius(g graph.Graph, file string, maxDepth int) []string {
 	for f := range seen {
 		out = append(out, f)
 	}
+	sort.Strings(out)
 	return out
 }

@@ -3,8 +3,10 @@ package baseline
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
@@ -223,7 +225,8 @@ func Compare(before, after Snapshot) Diff {
 			removed[gone{coverage.IsTest(f), b}]++
 		}
 	}
-	for f, a := range after.Complexity {
+	for _, f := range slices.Sorted(maps.Keys(after.Complexity)) {
+		a := after.Complexity[f]
 		b, ok := before.Complexity[f]
 		if k := (gone{coverage.IsTest(f), a}); !ok && removed[k] > 0 {
 			removed[k]--
@@ -240,14 +243,24 @@ func Compare(before, after Snapshot) Diff {
 			d.Improved = append(d.Improved, Change{f, b, a})
 		}
 	}
-	sort.Slice(d.Worsened, func(i, j int) bool {
-		return d.Worsened[i].After-d.Worsened[i].Before > d.Worsened[j].After-d.Worsened[j].Before
-	})
-	sort.Slice(d.Improved, func(i, j int) bool {
-		return d.Improved[i].Before-d.Improved[i].After > d.Improved[j].Before-d.Improved[j].After
-	})
-	sort.Slice(d.TestsGrew, func(i, j int) bool {
-		return d.TestsGrew[i].After-d.TestsGrew[i].Before > d.TestsGrew[j].After-d.TestsGrew[j].Before
-	})
+	byMove := func(cs []Change) {
+		sort.SliceStable(cs, func(i, j int) bool {
+			mi, mj := abs(cs[i].After-cs[i].Before), abs(cs[j].After-cs[j].Before)
+			if mi != mj {
+				return mi > mj
+			}
+			return cs[i].File < cs[j].File
+		})
+	}
+	byMove(d.Worsened)
+	byMove(d.Improved)
+	byMove(d.TestsGrew)
 	return d
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
