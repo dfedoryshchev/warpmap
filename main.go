@@ -374,7 +374,7 @@ func relGraph(dir string, g graph.Graph) graph.Graph {
 	if g.Edges != nil {
 		out.Edges = make([]graph.Edge, 0, len(g.Edges))
 		for _, e := range g.Edges {
-			out.Edges = append(out.Edges, graph.Edge{From: rel(dir, e.From), To: rel(dir, e.To)})
+			out.Edges = append(out.Edges, graph.Edge{From: rel(dir, e.From), To: rel(dir, e.To), TypeOnly: e.TypeOnly})
 		}
 	}
 	return out

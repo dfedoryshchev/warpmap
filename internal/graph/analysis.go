@@ -66,11 +66,12 @@ type Cycle struct {
 
 // Cycles returns the import tangles in the graph, one per strongly connected
 // component, largest first. circular imports are a maintenance smell: no file in
-// a tangle can be understood or changed without the others.
+// a tangle can be understood or changed without the others. type-only imports
+// are left out: the compiler erases them, so they close no loop at run time.
 func Cycles(g Graph) []Cycle {
 	adj := map[string][]string{}
 	for _, e := range g.Edges {
-		if e.From == e.To {
+		if e.From == e.To || e.TypeOnly {
 			continue // a file that re-exports itself is not a real cycle
 		}
 		adj[e.From] = append(adj[e.From], e.To)

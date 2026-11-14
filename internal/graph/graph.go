@@ -11,6 +11,9 @@ import (
 type Edge struct {
 	From string
 	To   string
+	// TypeOnly marks an import that names only types, which the compiler erases:
+	// it couples the files for the type checker but not at run time.
+	TypeOnly bool `json:",omitempty"`
 }
 
 type Graph struct {
@@ -46,16 +49,61 @@ var tsImportRe = regexp.MustCompile(
 var tsExts = []string{".ts", ".tsx", ".js", ".jsx"}
 var tsIndex = []string{"index.ts", "index.tsx", "index.js", "index.jsx"}
 
-func extractTs(src string) []string {
-	var specs []string
+// the words between the keyword and `from`: `type ...` erases the whole
+// statement, and so does a braced list in which every name is marked `type`.
+var (
+	tsClauseRe      = regexp.MustCompile(`^(?:import|export)\s+([^'"]*?)\s*from\s*['"]`)
+	tsTypeHeadRe    = regexp.MustCompile(`^type\b\s*(.*)$`)
+	tsTypeNameRe    = regexp.MustCompile(`^type\s+\S`)
+	tsRenamedTypeRe = regexp.MustCompile(`^type\s+as\s+[\w$]+$`)
+)
+
+// Import is one specifier a file names, and whether it brings in types only.
+type Import struct {
+	Spec     string
+	TypeOnly bool
+}
+
+func extractTs(src string) []Import {
+	var imports []Import
 	for _, m := range tsImportRe.FindAllStringSubmatch(src, -1) {
 		for _, g := range m[1:] {
 			if g != "" {
-				specs = append(specs, g)
+				imports = append(imports, Import{Spec: g, TypeOnly: tsTypeOnly(m[0])})
 			}
 		}
 	}
-	return specs
+	return imports
+}
+
+func tsTypeOnly(stmt string) bool {
+	c := tsClauseRe.FindStringSubmatch(stmt)
+	if c == nil {
+		return false
+	}
+	clause := strings.TrimSpace(c[1])
+	if h := tsTypeHeadRe.FindStringSubmatch(clause); h != nil {
+		// `import type from "x"` and `import type, { A } from "x"` bind a default
+		// import that happens to be named type.
+		rest := strings.TrimSpace(h[1])
+		return rest != "" && !strings.HasPrefix(rest, ",")
+	}
+	if !strings.HasPrefix(clause, "{") || !strings.HasSuffix(clause, "}") {
+		return false
+	}
+	names := 0
+	for _, n := range strings.Split(clause[1:len(clause)-1], ",") {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		// `{ type as T }` renames a value named type.
+		if !tsTypeNameRe.MatchString(n) || tsRenamedTypeRe.MatchString(n) {
+			return false
+		}
+		names++
+	}
+	return names > 0
 }
 
 func resolveTs(fromFile, spec string) string {
@@ -264,7 +312,7 @@ func within(dir, root string) bool {
 
 // --- dispatch by extension ---
 
-func extractImports(path, src string) []string {
+func extractImports(path, src string) []Import {
 	if l, ok := langFor(path); ok {
 		return l.extract(src)
 	}
@@ -297,23 +345,24 @@ func hasExt(p string, exts []string) bool {
 func Build(files []string) Graph {
 	g := Graph{Files: files}
 	p := newProject(files)
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	for _, f := range files {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			continue
 		}
-		for _, spec := range extractImports(f, string(src)) {
-			to := resolve(p, f, spec)
+		for _, imp := range extractImports(f, string(src)) {
+			to := resolve(p, f, imp.Spec)
 			if to == "" {
 				continue
 			}
 			key := f + "\x00" + to
-			if seen[key] {
+			if i, ok := seen[key]; ok {
+				g.Edges[i].TypeOnly = g.Edges[i].TypeOnly && imp.TypeOnly
 				continue
 			}
-			seen[key] = true
-			g.Edges = append(g.Edges, Edge{From: f, To: to})
+			seen[key] = len(g.Edges)
+			g.Edges = append(g.Edges, Edge{From: f, To: to, TypeOnly: imp.TypeOnly})
 		}
 	}
 	return g

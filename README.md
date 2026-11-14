@@ -197,7 +197,9 @@ unavailable and lists nothing.
 
 the snapshot is a single file, `.warpmap/baseline.json`. `baseline` will not replace one that already
 exists, because re-baselining a worse tree makes every later `diff` pass; it exits 2 and says when
-the snapshot was saved. `baseline --force .` replaces it on purpose.
+the snapshot was saved. `baseline --force .` replaces it on purpose. after upgrading warpmap, run
+`baseline --force .` once: cycles leave type-only imports out now, so a snapshot saved by an older
+version counts more of them, and until it is replaced a new cycle can hide behind that drop.
 
 the same loop run end to end against a real 95-file project, with the numbers it returned and
 what they did and did not mean, is in [examples/worked-audit.md](examples/worked-audit.md).
@@ -205,13 +207,18 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 ## what it does
 
 **understand**
-- `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz)
+- `analyze <dir>` - the dependency graph (`--json`, `--dot` for graphviz). an import that names
+  only types (`import type`, `export type ... from`, or a braced list where every name is marked
+  `type`) stays in the graph, marked `"TypeOnly": true` in the json and drawn dashed in the dot;
+  a list that mixes types and values is a value import
 - `hotspots <dir>` - the files that change often AND are complex; start here. `--json` prints
   `{"measure": "cx" or "ccn", "hotspots": [...]}`, each row the `file`, `score`, `churn`,
   `complexity` and `loc` (non-blank lines, whichever measure ranked)
 - `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
 - `dead` / `cycles` - orphans, import cycles (one row per set of files that import each other,
-  largest first)
+  largest first). the compiler erases a type-only import, so it closes no cycle; the report and
+  `baseline` / `diff` count cycles the same way. under `verbatimModuleSyntax` a braced list of
+  types alone still loads its module, which this does not see
 - `god <dir>` - over-central modules: files whose fan-in + fan-out is 20 or more, the same line
   the report's god-module finding and the `baseline` / `diff` count use; `--all` ranks every file
   with an import edge

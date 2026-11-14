@@ -10,6 +10,10 @@ func ToDot(g Graph) string {
 	var b strings.Builder
 	b.WriteString("digraph deps {\n  rankdir=LR;\n")
 	for _, e := range g.Edges {
+		if e.TypeOnly {
+			fmt.Fprintf(&b, "  %q -> %q [style=dashed];\n", e.From, e.To)
+			continue
+		}
 		fmt.Fprintf(&b, "  %q -> %q;\n", e.From, e.To)
 	}
 	b.WriteString("}\n")
