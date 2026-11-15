@@ -50,7 +50,7 @@ changing AND are hard to read:
 
 ```
 $ warpmap hotspots .
-complexity: internal (cx = non-blank lines + 3 x branch keywords); lizard on PATH gives cyclomatic complexity instead
+complexity: internal (cx = lines of code + 3 x branch keywords); lizard on PATH gives cyclomatic complexity instead
 1.000  churn=5   cx=25   src/store/session.ts
 0.360  churn=3   cx=15   src/api/client.ts
 0.096  churn=2   cx=6    src/ui/Widget.tsx
@@ -59,7 +59,9 @@ complexity: internal (cx = non-blank lines + 3 x branch keywords); lizard on PAT
 
 churn is how many commits touched the file in the last 6 months; `--months 24` reads further
 back, on every command that ranks by churn. cx is a structural proxy -
-non-blank lines plus three for each branch keyword - not cyclomatic complexity. the score is normalised
+lines of code plus three for each branch keyword - not cyclomatic complexity. comments are left
+out of both counts (`//` and `/* */` in TS and JS, `#` and docstrings in Python), so a
+well-commented file does not read as riskier, while a string literal counts as code. the score is normalised
 against the worst churn and the worst complexity in this run, so it ranks files within one
 repo and means nothing between two. test files are left out of the ranking (the same test-file
 rule `testgap` uses), so a long, busy test suite does not crowd out the code it tests. a test
@@ -213,7 +215,7 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
   a list that mixes types and values is a value import
 - `hotspots <dir>` - the files that change often AND are complex; start here. `--json` prints
   `{"measure": "cx" or "ccn", "hotspots": [...]}`, each row the `file`, `score`, `churn`,
-  `complexity` and `loc` (non-blank lines, whichever measure ranked)
+  `complexity` and `loc` (non-blank lines that are not comments, whichever measure ranked)
 - `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
 - `dead` / `cycles` - orphans, import cycles (one row per set of files that import each other,
   largest first). the compiler erases a type-only import, so it closes no cycle; the report and

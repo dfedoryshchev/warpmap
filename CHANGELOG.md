@@ -39,6 +39,11 @@ All notable changes to this project are documented in this file.
   dependents in path order; `diff` breaks ties between files that moved by the same amount on
   the path, and pairs a moved file the same way each time, so the Action no longer re-posts a
   changed comment for an unchanged pull request
+- The internal complexity measure (`cx`) no longer counts comments. Comment lines added to the
+  line count and a branch word in prose ("if the value is empty") added a branch, so a
+  well-commented file ranked as riskier. `//` and `/* */` are left out in TS and JS, `#` and
+  docstrings in Python; a comment marker inside a string literal stays code. Every `cx` in a
+  snapshot saved by an older version reads higher, so run `baseline --force` once after upgrading
 
 ## 0.2.0 - 2026-10-28
 

@@ -209,7 +209,7 @@ func TestHotspotsToolPrintsPathThenScore(t *testing.T) {
 	commit(t, repo, "src/a.ts", branchy+"// 3\n")
 	commit(t, repo, "src/util/b.ts", "export const b = 1;\n")
 
-	want := "src/a.ts  1.000\nsrc/util/b.ts  0.028\n"
+	want := "src/a.ts  1.000\nsrc/util/b.ts  0.030\n"
 	check := func(label, dir string) {
 		t.Helper()
 		got := callText(t, "hotspots", map[string]any{"dir": dir})

@@ -333,7 +333,7 @@ func hotspotsCmd(args []string) int {
 // internal measure otherwise. The two are different numbers, so stderr names the
 // one that ran and the column it is printed under: cx or ccn.
 func rankHotspots(dir string, files []string, churn metrics.Churn) ([]metrics.Hotspot, string) {
-	const internal = "complexity: internal (cx = non-blank lines + 3 x branch keywords)"
+	const internal = "complexity: internal (cx = lines of code + 3 x branch keywords)"
 	bin, err := exec.LookPath("lizard")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, internal+"; lizard on PATH gives cyclomatic complexity instead")
