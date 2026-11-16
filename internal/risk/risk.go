@@ -31,17 +31,20 @@ func TestGaps(dir string, g graph.Graph) []Gap {
 	return gaps
 }
 
-// Change is one file of a planned change, named as the caller named it.
+// Change is one file of a planned change, named as the caller named it. Shipped
+// is the part of Blast that is not tests.
 type Change struct {
 	File     string
 	Blast    int
+	Shipped  int
 	Untested bool
 }
 
 // Assessment is the verdict on a planned change.
 type Assessment struct {
-	Files    []Change
-	Combined int
+	Files           []Change
+	Combined        int
+	CombinedShipped int
 	// Risky counts the changed files that are untested and have more than the
 	// threshold's worth of dependents.
 	Risky int
@@ -62,12 +65,18 @@ func Assess(dir string, g graph.Graph, changed []string, blastLimit int) Assessm
 		for _, b := range br {
 			blast[b] = true
 		}
-		a.Files = append(a.Files, Change{cf, len(br), untested[abs]})
+		shipped, _ := trace.Split(dir, br)
+		a.Files = append(a.Files, Change{cf, len(br), len(shipped), untested[abs]})
 		if len(br) > blastLimit && untested[abs] {
 			a.Risky++
 		}
 	}
-	a.Combined = len(blast)
+	all := make([]string, 0, len(blast))
+	for b := range blast {
+		all = append(all, b)
+	}
+	shipped, _ := trace.Split(dir, all)
+	a.Combined, a.CombinedShipped = len(all), len(shipped)
 	return a
 }
 
@@ -79,9 +88,9 @@ func (a Assessment) Write(w io.Writer) {
 		if c.Untested {
 			tag = "UNTESTED"
 		}
-		fmt.Fprintf(w, "  %s: blast=%d, %s\n", c.File, c.Blast, tag)
+		fmt.Fprintf(w, "  %s: blast=%d, shipped=%d, %s\n", c.File, c.Blast, c.Shipped, tag)
 	}
-	fmt.Fprintf(w, "combined blast radius: %d files\n", a.Combined)
+	fmt.Fprintf(w, "combined blast radius: %d files, %d shipped\n", a.Combined, a.CombinedShipped)
 	if a.Risky > 0 {
 		fmt.Fprintf(w, "verdict: %d changed file(s) are high-blast AND untested - add tests before changing\n", a.Risky)
 		return

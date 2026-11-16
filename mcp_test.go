@@ -58,7 +58,7 @@ func TestMCPServerAnswersTheNextCallAfterAFailedOne(t *testing.T) {
 		!strings.Contains(first.Result.Content[0].Text, "warpmap.json") {
 		t.Errorf("failed call reply = %+v, want an isError result naming warpmap.json", first)
 	}
-	want := "2 files depend on src/c.ts\nsrc/a.ts\nsrc/b.ts\n"
+	want := "2 files depend on src/c.ts (2 shipped, 0 tests)\nsrc/a.ts\nsrc/b.ts\n"
 	if second.ID != 2 || second.Result.IsError || len(second.Result.Content) != 1 || second.Result.Content[0].Text != want {
 		t.Errorf("next call reply = %+v, want the dependents %q", second, want)
 	}

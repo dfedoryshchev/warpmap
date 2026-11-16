@@ -2,6 +2,7 @@ package trace
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -28,5 +29,23 @@ func TestBlastRadiusListsDependentsInPathOrder(t *testing.T) {
 		if len(got) != 31 || !slices.IsSorted(got) {
 			t.Fatalf("run %d: want the 31 dependents in path order, got %v", run, got)
 		}
+	}
+}
+
+func TestSplitSeparatesShippedDependentsFromTests(t *testing.T) {
+	dir := filepath.Join("proj")
+	in := []string{
+		filepath.Join(dir, "src", "a.test.ts"),
+		filepath.Join(dir, "src", "a.ts"),
+		filepath.Join(dir, "src", "__tests__", "b.ts"),
+		filepath.Join(dir, "src", "b.ts"),
+		filepath.Join(dir, "tests", "setup.ts"),
+	}
+	shipped, tests := Split(dir, in)
+	if want := []string{in[1], in[3]}; !slices.Equal(shipped, want) {
+		t.Errorf("shipped = %v, want %v", shipped, want)
+	}
+	if want := []string{in[0], in[2], in[4]}; !slices.Equal(tests, want) {
+		t.Errorf("tests = %v, want %v", tests, want)
 	}
 }

@@ -499,13 +499,33 @@ func TestRiskFailsOnAnUntestedChangePastTheThreshold(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, code := captureStdout(t, func() int { return riskCmd([]string{dir, "src/c.ts"}) })
-	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\n" +
+	want := "  src/c.ts: blast=2, shipped=2, UNTESTED\ncombined blast radius: 2 files, 2 shipped\n" +
 		"verdict: 1 changed file(s) are high-blast AND untested - add tests before changing\n"
 	if code != 1 || out != want {
 		t.Fatalf("risk exited %d and printed\n%swant 1 and\n%s", code, out, want)
 	}
 	out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/a.ts", "src/b.ts"}) })
-	want = "  src/a.ts: blast=0, UNTESTED\n  src/b.ts: blast=1, UNTESTED\ncombined blast radius: 1 files\nverdict: manageable\n"
+	want = "  src/a.ts: blast=0, shipped=0, UNTESTED\n  src/b.ts: blast=1, shipped=1, UNTESTED\n" +
+		"combined blast radius: 1 files, 1 shipped\nverdict: manageable\n"
+	if code != 0 || out != want {
+		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+}
+
+func TestTraceAndRiskCountShippedDependentsApartFromTests(t *testing.T) {
+	dir := chainProject(t)
+	spec := "import { a } from \"./a\";\ntest(\"a\", () => a);\n"
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.test.ts"), []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := captureStdout(t, func() int { return traceCmd([]string{dir, "src/c.ts"}) })
+	want := "3 files depend on src/c.ts (2 shipped, 1 test)\n  src/a.ts\n  src/b.ts\n  tests:\n    src/a.test.ts\n"
+	if code != 0 || out != want {
+		t.Fatalf("trace exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+	out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/c.ts", "src/b.ts"}) })
+	want = "  src/c.ts: blast=3, shipped=2, UNTESTED\n  src/b.ts: blast=2, shipped=1, UNTESTED\n" +
+		"combined blast radius: 3 files, 2 shipped\nverdict: manageable\n"
 	if code != 0 || out != want {
 		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)
 	}
@@ -546,7 +566,7 @@ func TestRiskSkipMissingAssessesTheRestAndNamesWhatItLeftOut(t *testing.T) {
 		})
 		return c
 	})
-	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\nverdict: manageable\n"
+	want := "  src/c.ts: blast=2, shipped=2, UNTESTED\ncombined blast radius: 2 files, 2 shipped\nverdict: manageable\n"
 	if code != 0 || stdout != want {
 		t.Fatalf("risk --skip-missing exited %d and printed\n%swant 0 and\n%s", code, stdout, want)
 	}

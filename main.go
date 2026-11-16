@@ -427,9 +427,16 @@ func traceCmd(args []string) int {
 		return code
 	}
 	affected := trace.BlastRadius(g, target, *depth)
-	fmt.Printf("%d files depend on %s\n", len(affected), file)
-	for _, f := range affected {
+	shipped, tests := trace.Split(dir, affected)
+	fmt.Printf("%d files depend on %s (%s)\n", len(affected), file, trace.Counts(len(shipped), len(tests)))
+	for _, f := range shipped {
 		fmt.Printf("  %s\n", rel(dir, f))
+	}
+	if len(tests) > 0 {
+		fmt.Println("  tests:")
+		for _, f := range tests {
+			fmt.Printf("    %s\n", rel(dir, f))
+		}
 	}
 	return 0
 }

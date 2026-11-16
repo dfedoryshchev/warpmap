@@ -91,11 +91,16 @@ before you touch the top file, find out what it drags with it:
 
 ```
 $ warpmap trace . src/store/session.ts
-3 files depend on src/store/session.ts
+3 files depend on src/store/session.ts (2 shipped, 1 test)
   src/store/index.ts
   src/ui/Widget.tsx
-  tests/session.test.ts
+  tests:
+    tests/session.test.ts
 ```
+
+the shipped files come first: a test that imports the file is where a change shows up, not where
+it ships, and in a well-tested library the tests can outnumber the shipped dependents ten to one.
+`risk` prints the same split as `shipped=` beside each `blast=`.
 
 and where the tests are not:
 
@@ -216,7 +221,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 - `hotspots <dir>` - the files that change often AND are complex; start here. `--json` prints
   `{"measure": "cx" or "ccn", "hotspots": [...]}`, each row the `file`, `score`, `churn`,
   `complexity` and `loc` (non-blank lines that are not comments, whichever measure ranked)
-- `trace <dir> <file>` - blast radius: everything that depends on a file; exits 2 when the file is not in the graph
+- `trace <dir> <file>` - blast radius: everything that depends on a file, shipped files first and
+  tests after, with both counts; exits 2 when the file is not in the graph
 - `dead` / `cycles` - orphans, import cycles (one row per set of files that import each other,
   largest first). the compiler erases a type-only import, so it closes no cycle; the report and
   `baseline` / `diff` count cycles the same way. under `verbatimModuleSyntax` a braced list of
@@ -501,8 +507,8 @@ verdict: RISK UP - this change made the codebase harder to work on safely
 the 1 source file(s) this pull request adds or changes:
 
 ```text
-  src/core.ts: blast=4, UNTESTED
-combined blast radius: 4 files
+  src/core.ts: blast=4, shipped=4, UNTESTED
+combined blast radius: 4 files, 4 shipped
 verdict: 1 changed file(s) are high-blast AND untested - add tests before changing
 ```
 ~~~
@@ -546,9 +552,9 @@ $ warpmap mcp
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hotspots","arguments":{"dir":"."}}}
 {"id":3,"jsonrpc":"2.0","result":{"content":[{"text":"src/store/session.ts  1.000\nsrc/api/client.ts  0.360\nsrc/ui/Widget.tsx  0.096\nsrc/util/format.ts  0.072\nsrc/util/uuid.ts  0.024\nsrc/api/index.ts  0.008\nsrc/store/index.ts  0.008\n","type":"text"}]}}
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"trace","arguments":{"dir":".","file":"src/store/session.ts"}}}
-{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts\nsrc/store/index.ts\nsrc/ui/Widget.tsx\ntests/session.test.ts\n","type":"text"}]}}
+{"id":4,"jsonrpc":"2.0","result":{"content":[{"text":"3 files depend on src/store/session.ts (2 shipped, 1 test)\nsrc/store/index.ts\nsrc/ui/Widget.tsx\ntests:\ntests/session.test.ts\n","type":"text"}]}}
 {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"risk","arguments":{"dir":".","files":["src/store/session.ts"]}}}
-{"id":5,"jsonrpc":"2.0","result":{"content":[{"text":"  src/store/session.ts: blast=3, tested\ncombined blast radius: 3 files\nverdict: manageable\n","type":"text"}]}}
+{"id":5,"jsonrpc":"2.0","result":{"content":[{"text":"  src/store/session.ts: blast=3, shipped=2, tested\ncombined blast radius: 3 files, 2 shipped\nverdict: manageable\n","type":"text"}]}}
 ```
 
 the handshake advertises `tools` and nothing else: there are no resources and no prompts. the
@@ -574,13 +580,14 @@ src/api/index.ts  0.008
 src/store/index.ts  0.008
 ```
 
-`trace` opens with the count, then names every dependent on a line of its own, relative to
-`dir` and in alphabetical order, so the list is the same from one call to the next. `testgap`
+`trace` opens with the count and its shipped and test halves, then names every shipped dependent
+on a line of its own, relative to `dir` and in alphabetical order, then a `tests:` line and the
+tests in the same order, so the list is the same from one call to the next. `testgap`
 is the files no test imports, widest blast radius first, up to ten lines, each the path, two
 spaces, then how many files depend on it. `risk` takes the files a change is about to touch as
 `files`, a list of paths relative to `dir`, and answers with exactly the text `warpmap risk`
-prints: a line per file with its blast radius and whether a test imports it, the combined blast
-radius, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
+prints: a line per file with its blast radius, how many of those are shipped files, and whether
+a test imports it, the combined blast radius with its shipped count, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
 where the command exits 1 on a risky change, the tool says so only in the verdict line. a path
 the graph does not hold comes back as an error result naming it, from `trace` and `risk` alike.
 `warpmap brief <dir> <file>` still packs the hotspot rank and the ownership count alongside the

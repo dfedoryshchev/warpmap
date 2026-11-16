@@ -97,6 +97,15 @@ func projectPath(dir, f string) string {
 	return filepath.ToSlash(r)
 }
 
+func pathLines(dir string, files []string) string {
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		paths = append(paths, projectPath(dir, f))
+	}
+	sort.Strings(paths)
+	return strings.Join(append(paths, ""), "\n")
+}
+
 func replyMissing(id json.RawMessage, missing []string) {
 	text := strings.Join(missing, ", ") + " is not in the graph"
 	reply(id, map[string]any{
@@ -148,14 +157,11 @@ func handleCall(req request, sources func(string) []string) {
 			return
 		}
 		br := trace.BlastRadius(g, filepath.Join(p.Args.Dir, p.Args.File), 0)
-		text = fmt.Sprintf("%d files depend on %s\n", len(br), p.Args.File)
-		deps := make([]string, 0, len(br))
-		for _, f := range br {
-			deps = append(deps, projectPath(p.Args.Dir, f))
-		}
-		sort.Strings(deps)
-		for _, d := range deps {
-			text += d + "\n"
+		shipped, tests := trace.Split(p.Args.Dir, br)
+		text = fmt.Sprintf("%d files depend on %s (%s)\n", len(br), p.Args.File, trace.Counts(len(shipped), len(tests)))
+		text += pathLines(p.Args.Dir, shipped)
+		if len(tests) > 0 {
+			text += "tests:\n" + pathLines(p.Args.Dir, tests)
 		}
 	case "testgap":
 		for i, gap := range risk.TestGaps(p.Args.Dir, graph.Build(sources(p.Args.Dir))) {

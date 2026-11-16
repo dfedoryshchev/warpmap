@@ -95,7 +95,11 @@ func TestToolsListOffersRiskAndTestgap(t *testing.T) {
 
 func TestTraceToolListsTheDependents(t *testing.T) {
 	dir := chain(t)
-	want := "2 files depend on src/c.ts\nsrc/a.ts\nsrc/b.ts\n"
+	spec := "import { a } from \"./a\";\ntest(\"a\", () => a);\n"
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.test.ts"), []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := "3 files depend on src/c.ts (2 shipped, 1 test)\nsrc/a.ts\nsrc/b.ts\ntests:\nsrc/a.test.ts\n"
 	if got := callText(t, "trace", map[string]any{"dir": dir, "file": "src/c.ts"}); got != want {
 		t.Errorf("absolute: trace text = %q, want %q", got, want)
 	}
@@ -126,13 +130,14 @@ func TestRiskToolGivesTheVerdictUnderTheProjectThreshold(t *testing.T) {
 		t.Fatal(err)
 	}
 	risky := callText(t, "risk", map[string]any{"dir": dir, "files": []string{"src/c.ts"}})
-	want := "  src/c.ts: blast=2, UNTESTED\ncombined blast radius: 2 files\n" +
+	want := "  src/c.ts: blast=2, shipped=2, UNTESTED\ncombined blast radius: 2 files, 2 shipped\n" +
 		"verdict: 1 changed file(s) are high-blast AND untested - add tests before changing\n"
 	if risky != want {
 		t.Errorf("risk on c text = %q, want %q", risky, want)
 	}
 	calm := callText(t, "risk", map[string]any{"dir": dir, "files": []string{"src/a.ts", "src/b.ts"}})
-	want = "  src/a.ts: blast=0, UNTESTED\n  src/b.ts: blast=1, UNTESTED\ncombined blast radius: 1 files\nverdict: manageable\n"
+	want = "  src/a.ts: blast=0, shipped=0, UNTESTED\n  src/b.ts: blast=1, shipped=1, UNTESTED\n" +
+		"combined blast radius: 1 files, 1 shipped\nverdict: manageable\n"
 	if calm != want {
 		t.Errorf("risk on a, b text = %q, want %q", calm, want)
 	}

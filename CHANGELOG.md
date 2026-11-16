@@ -20,6 +20,10 @@ All notable changes to this project are documented in this file.
   list where every name is marked `type`), since the compiler erases them. The edge stays in the
   graph, marked `TypeOnly` in `analyze --json` and dashed in `analyze --dot`. Cycle counts in a
   snapshot saved by an older version read higher, so run `baseline --force` once after upgrading
+- `trace` counts shipped dependents apart from tests: the first line carries both counts, the
+  shipped files are listed first and the tests after a `tests:` line. `risk` prints `shipped=`
+  beside each `blast=` and on the combined line. The MCP `trace` and `risk` tools answer the
+  same way. The verdict still weighs the whole blast radius against `thresholds.blast`
 - `ownership` prints one line, `one author across the window: every file has a bus factor of 1`,
   instead of a row per file when one person made every commit in the window; `report` says the
   same in its lead signals. `ownership --json` keeps every row and adds `window_authors`
