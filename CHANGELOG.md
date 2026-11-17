@@ -14,6 +14,8 @@ All notable changes to this project are documented in this file.
 - `report` leads with the hotspots one person holds: of the top ten, the files whose leading
   author made more than half of the commits, with that person's share. The json carries the same
   rows as `held_by_one`, and `window_authors`
+- `examples/untangling-a-legacy-module.md`: hotspots, trace, risk, god, coupling and ownership
+  on one module before it is split, against a public library at a pinned commit
 
 ### Changed
 - Import cycles leave type-only imports out (`import type`, `export type ... from`, and a braced

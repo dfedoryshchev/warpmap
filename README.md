@@ -210,6 +210,9 @@ version counts more of them, and until it is replaced a new cycle can hide behin
 
 the same loop run end to end against a real 95-file project, with the numbers it returned and
 what they did and did not mean, is in [examples/worked-audit.md](examples/worked-audit.md).
+the four questions to answer before splitting the file everyone edits - is it the one, how far a
+cut reaches, what catches a mistake, what moves with it - run against a public library, are in
+[examples/untangling-a-legacy-module.md](examples/untangling-a-legacy-module.md).
 
 ## what it does
 
