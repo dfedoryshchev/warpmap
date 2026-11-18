@@ -544,24 +544,41 @@ func testgapCmd(args []string) int {
 	if limit > len(gaps) {
 		limit = len(gaps)
 	}
+	typesOnly := 0
+	for _, gap := range gaps {
+		if gap.TypesOnly {
+			typesOnly++
+		}
+	}
 	if *asJSON {
 		type row struct {
-			File  string `json:"file"`
-			Blast int    `json:"blast"`
+			File      string `json:"file"`
+			Blast     int    `json:"blast"`
+			Direct    int    `json:"direct"`
+			TypesOnly bool   `json:"types_only,omitempty"`
 		}
 		rows := []row{}
 		for _, gap := range gaps[:limit] {
-			rows = append(rows, row{rel(dir, gap.File), gap.Blast})
+			rows = append(rows, row{rel(dir, gap.File), gap.Blast, gap.Direct, gap.TypesOnly})
 		}
 		writeJSON(os.Stdout, struct {
-			Untested int   `json:"untested"`
-			Files    []row `json:"files"`
-		}{len(gaps), rows})
+			Untested  int   `json:"untested"`
+			TypesOnly int   `json:"types_only"`
+			Files     []row `json:"files"`
+		}{len(gaps) - typesOnly, typesOnly, rows})
 		return 0
 	}
-	fmt.Printf("%d untested files; the riskiest (highest blast radius) first - test these before you change them:\n", len(gaps))
+	fmt.Printf("%d untested files", len(gaps)-typesOnly)
+	if typesOnly > 0 {
+		fmt.Printf(" and %d that tests import only for types", typesOnly)
+	}
+	fmt.Println("; the riskiest (highest blast radius) first - test these before you change them:")
 	for _, gap := range gaps[:limit] {
-		fmt.Printf("  blast=%-4d %s\n", gap.Blast, rel(dir, gap.File))
+		line := fmt.Sprintf("  blast=%-4d direct=%-3d %s", gap.Blast, gap.Direct, rel(dir, gap.File))
+		if gap.TypesOnly {
+			line += "  (" + risk.TypesOnlyTag + ")"
+		}
+		fmt.Println(line)
 	}
 	return 0
 }

@@ -39,21 +39,41 @@ func Kind(f string) string {
 // from the graph (not line coverage). a file a test imports is considered exercised.
 // the graph is keyed by the walk's paths under dir, and so is what comes back.
 func Untested(dir string, g graph.Graph) []string {
+	untested, _ := split(dir, g)
+	return untested
+}
+
+// TypesOnly returns the source files that tests import only for their types. the
+// compiler erases such an import, so the suite never runs the file, but it does
+// type-check it; these are neither tested nor untested.
+func TypesOnly(dir string, g graph.Graph) []string {
+	_, typesOnly := split(dir, g)
+	return typesOnly
+}
+
+func split(dir string, g graph.Graph) (untested, typesOnly []string) {
 	isTest := func(f string) bool { return IsTest(relTo(dir, f)) }
-	tested := map[string]bool{}
+	runs, names := map[string]bool{}, map[string]bool{}
 	for _, e := range g.Edges {
-		if isTest(e.From) {
-			tested[e.To] = true
-		}
-	}
-	var out []string
-	for _, f := range g.Files {
-		if isTest(f) || tested[f] {
+		if !isTest(e.From) {
 			continue
 		}
-		out = append(out, f)
+		if e.TypeOnly {
+			names[e.To] = true
+		} else {
+			runs[e.To] = true
+		}
 	}
-	return out
+	for _, f := range g.Files {
+		switch {
+		case isTest(f) || runs[f]:
+		case names[f]:
+			typesOnly = append(typesOnly, f)
+		default:
+			untested = append(untested, f)
+		}
+	}
+	return untested, typesOnly
 }
 
 func relTo(dir, f string) string {

@@ -50,6 +50,13 @@ All notable changes to this project are documented in this file.
   well-commented file ranked as riskier. `//` and `/* */` are left out in TS and JS, `#` and
   docstrings in Python; a comment marker inside a string literal stays code. Every `cx` in a
   snapshot saved by an older version reads higher, so run `baseline --force` once after upgrading
+- `risk` and `testgap` no longer call a file tested when tests only `import type` it. The
+  compiler erases that import, so the suite never runs the file; it is tagged `types only,
+  checked by the compiler` instead, in both commands and in `testgap --json` (`types_only`). The
+  MCP `testgap` tool leaves such files out of its list
+- `testgap` prints `direct=` beside `blast=`, the shipped files that import the file itself, and
+  breaks a tie in blast on it, then on the path. On a project that re-exports through barrels many
+  files share one blast radius, and the order among them was the walk's
 
 ## 0.2.0 - 2026-10-28
 

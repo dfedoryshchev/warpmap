@@ -51,6 +51,22 @@ func TestUntestedCountsPythonAndTypeTests(t *testing.T) {
 	}
 }
 
+func TestATypeOnlyImportFromATestIsNeitherTestedNorUntested(t *testing.T) {
+	g := graph.Graph{
+		Files: []string{"src/a.ts", "src/t.ts", "src/u.ts", "src/a.test.ts"},
+		Edges: []graph.Edge{
+			{From: "src/a.test.ts", To: "src/a.ts"},
+			{From: "src/a.test.ts", To: "src/t.ts", TypeOnly: true},
+		},
+	}
+	if got, want := Untested(".", g), []string{"src/u.ts"}; !slices.Equal(got, want) {
+		t.Errorf("untested = %v, want %v", got, want)
+	}
+	if got, want := TypesOnly(".", g), []string{"src/t.ts"}; !slices.Equal(got, want) {
+		t.Errorf("types only = %v, want %v", got, want)
+	}
+}
+
 // the same two files, the project named from inside it and from outside it.
 // a `tests/` directory above the project is not part of it, and a `tests/`
 // directory at its top is.

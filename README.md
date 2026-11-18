@@ -107,10 +107,16 @@ and where the tests are not:
 ```
 $ warpmap testgap .
 6 untested files; the riskiest (highest blast radius) first - test these before you change them:
-  blast=5    src/api/client.ts
-  blast=4    src/api/index.ts
-  blast=4    src/util/format.ts
+  blast=5    direct=1   src/api/client.ts
+  blast=4    direct=2   src/api/index.ts
+  blast=4    direct=2   src/util/format.ts
 ```
+
+`blast` is everything downstream; `direct` is how many shipped files import the file itself, and
+it breaks a tie in blast, which on a project that re-exports through barrels is common. a file
+that tests import only with `import type` is not run by the suite, but the compiler checks it, so
+it is neither tested nor untested: it is listed with the tag `(types only, checked by the
+compiler)`, and `risk` gives it the same tag instead of `tested`.
 
 that is the whole audit loop: what is risky, what depends on it, what is untested.
 `warpmap report . -o audit.md` writes the same findings to one markdown file you can hand
@@ -247,8 +253,10 @@ cut reaches, what catches a mistake, what moves with it - run against a public l
 - `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
 - `diff <dir>` - did the change make the codebase better or worse? exits 1 on regression, 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
-- `testgap <dir>` - untested files, ranked by how much depends on them. `--json` prints
-  `{"untested": <count>, "files": [...]}`, each row the `file` and its `blast`
+- `testgap <dir>` - untested files, ranked by how much depends on them, ties broken on direct
+  shipped importers. `--json` prints `{"untested": <count>, "types_only": <count>, "files": [...]}`,
+  each row the `file`, its `blast` and `direct`, and `"types_only": true` on a file tests import
+  only for its types
 
 **work with agents**
 - `brief <dir> <file>` - a context pack to hand an agent before it touches a file
@@ -587,10 +595,11 @@ src/store/index.ts  0.008
 on a line of its own, relative to `dir` and in alphabetical order, then a `tests:` line and the
 tests in the same order, so the list is the same from one call to the next. `testgap`
 is the files no test imports, widest blast radius first, up to ten lines, each the path, two
-spaces, then how many files depend on it. `risk` takes the files a change is about to touch as
+spaces, then how many files depend on it; a file tests import only for its types is left out of
+the tool's list, since it has no tag there. `risk` takes the files a change is about to touch as
 `files`, a list of paths relative to `dir`, and answers with exactly the text `warpmap risk`
 prints: a line per file with its blast radius, how many of those are shipped files, and whether
-a test imports it, the combined blast radius with its shipped count, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
+a test runs it (`tested`, `UNTESTED`, or `types only, checked by the compiler`), the combined blast radius with its shipped count, then the verdict, judged against `thresholds.blast` from the project's `warpmap.json`.
 where the command exits 1 on a risky change, the tool says so only in the verdict line. a path
 the graph does not hold comes back as an error result naming it, from `trace` and `risk` alike.
 `warpmap brief <dir> <file>` still packs the hotspot rank and the ownership count alongside the

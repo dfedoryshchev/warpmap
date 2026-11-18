@@ -14,30 +14,66 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/trace"
 )
 
-// Gap is an untested file and how many files depend on it.
+// TypesOnlyTag names a file that tests import only for its types.
+const TypesOnlyTag = "types only, checked by the compiler"
+
+// Gap is a file no test runs: how many files depend on it, how many shipped
+// files import it directly, and whether tests name it for its types.
 type Gap struct {
-	File  string
-	Blast int
+	File      string
+	Blast     int
+	Direct    int
+	TypesOnly bool
 }
 
-// TestGaps returns the files no test imports, widest blast radius first. Files
-// are the walk's own paths, as in g.
+// TestGaps returns the files no test runs, widest blast radius first. On a
+// barrel-heavy project most files share a near-identical blast radius, so ties
+// go to the file more shipped files import directly. Files are the walk's own
+// paths, as in g.
 func TestGaps(dir string, g graph.Graph) []Gap {
-	var gaps []Gap
-	for _, f := range coverage.Untested(dir, g) {
-		gaps = append(gaps, Gap{f, len(trace.BlastRadius(g, f, 0))})
+	direct := map[string]int{}
+	for _, e := range g.Edges {
+		if !coverage.IsTest(relTo(dir, e.From)) {
+			direct[e.To]++
+		}
 	}
-	sort.SliceStable(gaps, func(i, j int) bool { return gaps[i].Blast > gaps[j].Blast })
+	var gaps []Gap
+	add := func(files []string, typesOnly bool) {
+		for _, f := range files {
+			gaps = append(gaps, Gap{f, len(trace.BlastRadius(g, f, 0)), direct[f], typesOnly})
+		}
+	}
+	add(coverage.Untested(dir, g), false)
+	add(coverage.TypesOnly(dir, g), true)
+	sort.Slice(gaps, func(i, j int) bool {
+		a, b := gaps[i], gaps[j]
+		if a.Blast != b.Blast {
+			return a.Blast > b.Blast
+		}
+		if a.Direct != b.Direct {
+			return a.Direct > b.Direct
+		}
+		return a.File < b.File
+	})
 	return gaps
+}
+
+func relTo(dir, f string) string {
+	r, err := filepath.Rel(dir, f)
+	if err != nil {
+		return f
+	}
+	return filepath.ToSlash(r)
 }
 
 // Change is one file of a planned change, named as the caller named it. Shipped
 // is the part of Blast that is not tests.
 type Change struct {
-	File     string
-	Blast    int
-	Shipped  int
-	Untested bool
+	File      string
+	Blast     int
+	Shipped   int
+	Untested  bool
+	TypesOnly bool
 }
 
 // Assessment is the verdict on a planned change.
@@ -53,9 +89,12 @@ type Assessment struct {
 // Assess weighs changing the given files, each relative to dir, against a
 // blast threshold.
 func Assess(dir string, g graph.Graph, changed []string, blastLimit int) Assessment {
-	untested := map[string]bool{}
+	untested, typesOnly := map[string]bool{}, map[string]bool{}
 	for _, f := range coverage.Untested(dir, g) {
 		untested[f] = true
+	}
+	for _, f := range coverage.TypesOnly(dir, g) {
+		typesOnly[f] = true
 	}
 	var a Assessment
 	blast := map[string]bool{}
@@ -66,7 +105,7 @@ func Assess(dir string, g graph.Graph, changed []string, blastLimit int) Assessm
 			blast[b] = true
 		}
 		shipped, _ := trace.Split(dir, br)
-		a.Files = append(a.Files, Change{cf, len(br), len(shipped), untested[abs]})
+		a.Files = append(a.Files, Change{cf, len(br), len(shipped), untested[abs], typesOnly[abs]})
 		if len(br) > blastLimit && untested[abs] {
 			a.Risky++
 		}
@@ -85,8 +124,11 @@ func Assess(dir string, g graph.Graph, changed []string, blastLimit int) Assessm
 func (a Assessment) Write(w io.Writer) {
 	for _, c := range a.Files {
 		tag := "tested"
-		if c.Untested {
+		switch {
+		case c.Untested:
 			tag = "UNTESTED"
+		case c.TypesOnly:
+			tag = TypesOnlyTag
 		}
 		fmt.Fprintf(w, "  %s: blast=%d, shipped=%d, %s\n", c.File, c.Blast, c.Shipped, tag)
 	}

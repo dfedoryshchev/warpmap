@@ -487,7 +487,7 @@ func TestTestgapCountsTheSameWhateverTheProjectIsCalled(t *testing.T) {
 		t.Fatalf("testgap . exited %d", code)
 	}
 	want := "2 untested files; the riskiest (highest blast radius) first - test these before you change them:\n" +
-		"  blast=3    src/c.ts\n  blast=2    src/b.ts\n"
+		"  blast=3    direct=1   src/c.ts\n  blast=2    direct=1   src/b.ts\n"
 	if named != want || dot != want {
 		t.Fatalf("testgap <dir> printed\n%stestgap . printed\n%swant\n%s", named, dot, want)
 	}
@@ -525,6 +525,27 @@ func TestTraceAndRiskCountShippedDependentsApartFromTests(t *testing.T) {
 	}
 	out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/c.ts", "src/b.ts"}) })
 	want = "  src/c.ts: blast=3, shipped=2, UNTESTED\n  src/b.ts: blast=2, shipped=1, UNTESTED\n" +
+		"combined blast radius: 3 files, 2 shipped\nverdict: manageable\n"
+	if code != 0 || out != want {
+		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+}
+
+func TestTestgapAndRiskTagAFileTestsImportOnlyForTypes(t *testing.T) {
+	dir := chainProject(t)
+	spec := "import type { c } from \"./c\";\nimport { a } from \"./a\";\ntest(\"a\", () => a);\n"
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.test.ts"), []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := captureStdout(t, func() int { return testgapCmd([]string{dir}) })
+	want := "1 untested files and 1 that tests import only for types; the riskiest (highest blast radius) first - test these before you change them:\n" +
+		"  blast=3    direct=1   src/c.ts  (types only, checked by the compiler)\n" +
+		"  blast=2    direct=1   src/b.ts\n"
+	if code != 0 || out != want {
+		t.Fatalf("testgap exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+	out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/c.ts"}) })
+	want = "  src/c.ts: blast=3, shipped=2, types only, checked by the compiler\n" +
 		"combined blast radius: 3 files, 2 shipped\nverdict: manageable\n"
 	if code != 0 || out != want {
 		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)

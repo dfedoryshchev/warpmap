@@ -164,11 +164,16 @@ func handleCall(req request, sources func(string) []string) {
 			text += "tests:\n" + pathLines(p.Args.Dir, tests)
 		}
 	case "testgap":
-		for i, gap := range risk.TestGaps(p.Args.Dir, graph.Build(sources(p.Args.Dir))) {
-			if i >= 10 {
+		listed := 0
+		for _, gap := range risk.TestGaps(p.Args.Dir, graph.Build(sources(p.Args.Dir))) {
+			if listed >= 10 {
 				break
 			}
+			if gap.TypesOnly {
+				continue
+			}
 			text += fmt.Sprintf("%s  %d\n", projectPath(p.Args.Dir, gap.File), gap.Blast)
+			listed++
 		}
 	case "risk":
 		if len(p.Args.Files) == 0 {
