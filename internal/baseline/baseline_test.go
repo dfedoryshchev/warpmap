@@ -81,35 +81,47 @@ func TestCompareOrdersByLargestMove(t *testing.T) {
 }
 
 func TestRiskUpTerms(t *testing.T) {
-	one := []Change{{"x.ts", 1, 2}}
 	cases := []struct {
-		name string
-		d    Diff
-		want bool
+		name         string
+		d            Diff
+		risk, warned bool
 	}{
-		{"nothing moved", Diff{}, false},
-		{"new cycle", Diff{Cycles: 1}, true},
-		{"cycle removed", Diff{Cycles: -1}, false},
-		{"new god module", Diff{GodModules: 1}, true},
-		{"god module removed", Diff{GodModules: -1}, false},
-		{"more worsened than improved", Diff{Worsened: one}, true},
-		{"worsened balanced by improved", Diff{Worsened: one, Improved: one}, false},
-		{"more improved than worsened", Diff{Improved: one}, false},
-		{"new dead code", Diff{Orphans: 1}, true},
-		{"dead code removed", Diff{Orphans: -2}, false},
-		{"dead code removed but a cycle added", Diff{Orphans: -2, Cycles: 1}, true},
-		{"edges alone do not trip it", Diff{Edges: 40}, false},
+		{"nothing moved", Diff{}, false, false},
+		{"new cycle", Diff{Cycles: 1}, true, false},
+		{"cycle removed", Diff{Cycles: -1}, false, false},
+		{"new god module", Diff{GodModules: 1}, true, false},
+		{"god module removed", Diff{GodModules: -1}, false, false},
+		{"net complexity growth warns", Diff{Net: 1}, false, true},
+		{"complexity balanced out", Diff{Net: 0}, false, false},
+		{"net complexity drop", Diff{Net: -5}, false, false},
+		{"new dead code", Diff{Orphans: 1}, true, false},
+		{"dead code removed", Diff{Orphans: -2}, false, false},
+		{"dead code removed but a cycle added", Diff{Orphans: -2, Cycles: 1}, true, false},
+		{"a cycle outranks the warning", Diff{Cycles: 1, Net: 9}, true, false},
+		{"edges alone do not trip it", Diff{Edges: 40}, false, false},
 	}
 	for _, c := range cases {
-		if got := c.d.RiskUp(); got != c.want {
-			t.Errorf("%s: RiskUp = %v, want %v", c.name, got, c.want)
+		if got := c.d.RiskUp(); got != c.risk {
+			t.Errorf("%s: RiskUp = %v, want %v", c.name, got, c.risk)
+		}
+		if got := c.d.Warn(); got != c.warned {
+			t.Errorf("%s: Warn = %v, want %v", c.name, got, c.warned)
 		}
 	}
 }
 
+func TestCompareWeighsComplexityByMagnitude(t *testing.T) {
+	d := Compare(
+		snap(map[string]int{"big.ts": 100, "a.ts": 10, "b.ts": 10, "gone.ts": 30}),
+		snap(map[string]int{"big.ts": 1000, "a.ts": 9, "b.ts": 9, "new.ts": 5}),
+	)
+	if d.Net != 900-1-1+5-30 || !d.Warn() {
+		t.Fatalf("net = %d, warn = %v; want %d and a warning", d.Net, d.Warn(), 900-1-1+5-30)
+	}
+}
+
 func TestTermsNameWhatTrippedTheGate(t *testing.T) {
-	one := []Change{{"x.ts", 1, 2}}
-	d := Diff{Orphans: 2, GodModules: 1, Worsened: one}
+	d := Diff{Orphans: 2, GodModules: 1, Net: 1}
 	var tripped []string
 	for _, term := range d.Terms() {
 		if term.Tripped {
@@ -138,8 +150,8 @@ func TestCompareCountsANewFileAsWorsened(t *testing.T) {
 	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"added.ts", 0, 200}) {
 		t.Fatalf("worsened = %+v", d.Worsened)
 	}
-	if !d.RiskUp() {
-		t.Fatal("a 200-point file added with nothing else moved passed the gate")
+	if d.Net != 200 || !d.Warn() {
+		t.Fatalf("a 200-point file added with nothing else moved: net %d, warn %v", d.Net, d.Warn())
 	}
 }
 
@@ -212,8 +224,8 @@ func TestCompareStillTripsOnASourceFileNextToGrowingTests(t *testing.T) {
 	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"src/a.ts", 10, 25}) {
 		t.Fatalf("worsened = %+v", d.Worsened)
 	}
-	if !d.RiskUp() {
-		t.Fatal("a source file grew and the gate passed")
+	if d.Net != 15 || !d.Warn() {
+		t.Fatalf("a source file grew by 15: net %d, warn %v", d.Net, d.Warn())
 	}
 }
 
@@ -242,7 +254,7 @@ func TestCompareStillCountsAFileThatMovedAndGrew(t *testing.T) {
 		snap(map[string]int{"src/d.ts": 12}),
 		snap(map[string]int{"src/lib/d.ts": 20}),
 	)
-	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"src/lib/d.ts", 0, 20}) || !d.RiskUp() {
+	if len(d.Worsened) != 1 || d.Worsened[0] != (Change{"src/lib/d.ts", 0, 20}) || d.Net != 8 || !d.Warn() {
 		t.Fatalf("diff = %+v", d)
 	}
 }

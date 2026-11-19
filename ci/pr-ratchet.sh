@@ -18,6 +18,7 @@ bin="${WARPMAP_BIN:-warpmap}"
 dir="${INPUT_DIRECTORY:-.}"
 base="${INPUT_BASE_SHA:-}"
 fail_on_risk="${INPUT_FAIL_ON_RISK:-true}"
+fail_on="${INPUT_FAIL_ON:-risk}"
 want_comment="${INPUT_COMMENT:-true}"
 token="${INPUT_TOKEN:-}"
 pr="${INPUT_PR_NUMBER:-}"
@@ -83,15 +84,18 @@ find "$target" -mindepth 1 -maxdepth 1 ! -name '.warpmap' -exec rm -rf {} + ||
 git archive HEAD | tar -x -C "$tree" || die "cannot export the checked-out commit"
 mkdir -p "$target"
 
-"$bin" diff "$target" >"$work/ratchet.txt" 2>&1
+"$bin" diff --fail-on "$fail_on" "$target" >"$work/ratchet.txt" 2>&1
 case $? in
 0) ratchet_state="ok" ;;
 1) ratchet_state="risk-up" ;;
 *)
 	cat "$work/ratchet.txt" >&2
-	die "diff could not run; a malformed warpmap.json is the usual cause"
+	die "diff could not run; a malformed warpmap.json or an unknown fail-on value is the usual cause"
 	;;
 esac
+if [ "$ratchet_state" = "ok" ] && grep -q '^verdict: WARN' "$work/ratchet.txt"; then
+	ratchet_state="warn"
+fi
 
 # only files that still exist can be traced, so deletions are dropped along with everything the
 # graph does not read. paths come out relative to the repository root and warpmap wants them
@@ -129,7 +133,8 @@ fi
 
 case "$ratchet_state:$risk_state" in
 risk-up:*) headline="risk up" ;;
-ok:risky) headline="high-blast untested files changed" ;;
+*:risky) headline="high-blast untested files changed" ;;
+warn:*) headline="more complex on balance" ;;
 *) headline="no net degradation" ;;
 esac
 

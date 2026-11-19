@@ -18,6 +18,12 @@ All notable changes to this project are documented in this file.
   on one module before it is split, against a public library at a pinned commit
 
 ### Changed
+- `diff` has a second tier: complexity growth is `verdict: WARN` and exits 0, while a new cycle,
+  god module or dead file is still `RISK UP` and exits 1. The complexity term is weighed by
+  magnitude, `net complexity` on the summary line (what the shipped files gained, less what they
+  lost and the scores of removed files), instead of comparing how many files moved each way, so
+  one file growing by hundreds against two shrinking by one no longer reads `ok`. `--fail-on warn`
+  makes a warning exit 1. The Action takes the same `fail-on` input and reports `ratchet=warn`
 - Import cycles leave type-only imports out (`import type`, `export type ... from`, and a braced
   list where every name is marked `type`), since the compiler erases them. The edge stays in the
   graph, marked `TypeOnly` in `analyze --json` and dashed in `analyze --dot`. Cycle counts in a

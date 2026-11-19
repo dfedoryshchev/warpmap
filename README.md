@@ -172,31 +172,38 @@ $ warpmap baseline .
 baseline saved: 8 files, 7 edges, 0 cycles, 0 god-modules
 
 $ warpmap diff .
-since baseline: edges +0, cycles +0, orphans +0, god-modules +0
+since baseline: edges +0, cycles +0, orphans +0, god-modules +0, net complexity +18
 1 files got more complex:
   +18  src/store/session.ts
-verdict: RISK UP - this change made the codebase harder to work on safely
+verdict: WARN - the code grew more complex on balance; read the list above
 ```
 
-a net degradation is any one of: more import cycles, more god modules, more files that got
-more complex than got simpler, or more dead code (`orphans`, files nothing imports; entry points
-such as `index`, `main`, `app`, `.d.ts` and test files never count). dead code is judged on the
-net count, so deleting one dead file balances adding another.
+the verdict has two tiers. a structural regression is `RISK UP`: more import cycles, more god
+modules, or more dead code (`orphans`, files nothing imports; entry points such as `index`,
+`main`, `app`, `.d.ts` and test files never count). dead code is judged on the net count, so
+deleting one dead file balances adding another.
+
+complexity growing is a `WARN`. a feature adds code, and a gate that fails every pull request
+that adds an `if` gets switched off: replayed over thirty merged pull requests each of
+react-hook-form and of hono, up to mid-November 2026, a complexity term that failed the build
+stopped 44 of the 60, every one of them on that term alone. so the term is weighed by magnitude - `net complexity` is what the
+shipped files gained, less what they lost and the scores of removed files - and a positive net
+warns. `--fail-on warn` makes a warning exit 1 as well, for a project that wants it strict.
 
 test files (the ones `testgap` treats as tests) are left out of the complexity count both ways, so
-adding or growing tests cannot fail the gate. `diff` prints them on a line of their own,
+adding or growing tests cannot move the verdict. `diff` prints them on a line of their own,
 `3 test files grew (not part of the verdict)`, and a snapshot saved by an earlier version needs no
 re-baseline for this.
 
-a file that is new since the baseline counts as more complex, and a removed one counts neither
-way. a file moved or renamed without changing its score is neither: a removed file and a new one
+a file that is new since the baseline counts as more complex by its whole score, and a removed
+one takes its score off the net. a file moved or renamed without changing its score is neither: a removed file and a new one
 with the same score pair off as one file that moved. a file that moved and grew counts as new.
 
-`diff` exits non-zero on a net degradation, which is what makes it usable as a CI gate. the exit
-code says which outcome it was:
+`diff` exits non-zero on a structural regression, which is what makes it usable as a CI gate. the
+exit code says which outcome it was:
 
-- `0` - no net degradation
-- `1` - `RISK UP`, the change made things worse
+- `0` - no net degradation, or a `WARN` (the verdict line tells the two apart)
+- `1` - `RISK UP`, the change made things worse; with `--fail-on warn`, a `WARN` too
 - `2` - no comparison was made: there is no baseline, the baseline cannot be read, the
   command was called wrong, or `warpmap.json` is malformed. the reason goes to stderr, so a gate that never had a baseline does
   not read as a change that made things worse
@@ -251,7 +258,7 @@ cut reaches, what catches a mistake, what moves with it - run against a public l
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
-- `diff <dir>` - did the change make the codebase better or worse? exits 1 on regression, 2 when there is no baseline to compare against
+- `diff <dir>` - did the change make the codebase better or worse? exits 1 on a structural regression (and on net complexity growth with `--fail-on warn`), 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them, ties broken on direct
   shipped importers. `--json` prints `{"untested": <count>, "types_only": <count>, "files": [...]}`,
@@ -504,15 +511,15 @@ over the source files the pull request adds or changes, which is where `threshol
 what counts as risky:
 
 ~~~
-### warpmap: risk up
+### warpmap: high-blast untested files changed
 
 the ratchet, against `de4ccf0`:
 
 ```text
-since baseline: edges +0, cycles +0, orphans +0, god-modules +0
+since baseline: edges +0, cycles +0, orphans +0, god-modules +0, net complexity +50
 1 files got more complex:
   +50  src/core.ts
-verdict: RISK UP - this change made the codebase harder to work on safely
+verdict: WARN - the code grew more complex on balance; read the list above
 ```
 
 the 1 source file(s) this pull request adds or changes:
@@ -531,11 +538,12 @@ pushing again edits that comment rather than adding another one.
 | `directory` | `.` | the directory to analyse, relative to the repository root |
 | `base-sha` | the pull request's base commit | what the baseline is taken from |
 | `fail-on-risk` | `true` | `false` still reports, and leaves the job green |
+| `fail-on` | `risk` | `warn` fails the job on net complexity growth as well |
 | `comment` | `true` | `false` gates without writing to the pull request |
 | `token` | `github.token` | needs permission to write pull request comments |
 | `pr-number` | the pull request's number | which pull request to comment on |
 
-outputs: `ratchet` (`ok` or `risk-up`), `risk` (`manageable`, `risky`, or `skipped` when the pull
+outputs: `ratchet` (`ok`, `warn` or `risk-up`), `risk` (`manageable`, `risky`, or `skipped` when the pull
 request changes no source file), `report` (the comment body) and `comment-url`.
 
 two things worth knowing. the action analyses exported copies of the two commits, so it writes

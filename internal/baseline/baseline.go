@@ -174,12 +174,17 @@ type Diff struct {
 	Worsened   []Change // files whose complexity went up
 	Improved   []Change // files whose complexity went down
 	TestsGrew  []Change // test files whose complexity went up; never part of the verdict
+	// Net is the complexity the shipped files gained, less what they lost: the
+	// worsened deltas, minus the improved ones and the scores of removed files.
+	Net int
 }
 
-// Term is one named condition of the verdict.
+// Term is one named condition of the verdict. A Warn term only ever warns: a
+// feature adds code, so complexity growing is the normal shape of a change.
 type Term struct {
 	Name    string
 	Tripped bool
+	Warn    bool
 }
 
 // Terms lists every condition the verdict is made of, tripped or not. Each term
@@ -187,16 +192,29 @@ type Term struct {
 // counted on net growth, and entry points (see graph.Orphans) never count as dead.
 func (d Diff) Terms() []Term {
 	return []Term{
-		{"cycles", d.Cycles > 0},
-		{"god-modules", d.GodModules > 0},
-		{"complexity", len(d.Worsened) > len(d.Improved)},
-		{"dead-code", d.Orphans > 0},
+		{"cycles", d.Cycles > 0, false},
+		{"god-modules", d.GodModules > 0, false},
+		{"complexity", d.Net > 0, true},
+		{"dead-code", d.Orphans > 0, false},
 	}
 }
 
 // RiskUp reports whether the change made the codebase harder to work on safely:
-// whether any term tripped.
+// whether any term that is not a warning tripped.
 func (d Diff) RiskUp() bool {
+	for _, t := range d.Terms() {
+		if t.Tripped && !t.Warn {
+			return true
+		}
+	}
+	return false
+}
+
+// Warn reports whether only warning terms tripped.
+func (d Diff) Warn() bool {
+	if d.RiskUp() {
+		return false
+	}
 	for _, t := range d.Terms() {
 		if t.Tripped {
 			return true
@@ -242,6 +260,17 @@ func Compare(before, after Snapshot) Diff {
 		case a < b:
 			d.Improved = append(d.Improved, Change{f, b, a})
 		}
+	}
+	for k, n := range removed {
+		if !k.test {
+			d.Net -= k.score * n
+		}
+	}
+	for _, c := range d.Worsened {
+		d.Net += c.After - c.Before
+	}
+	for _, c := range d.Improved {
+		d.Net -= c.Before - c.After
 	}
 	byMove := func(cs []Change) {
 		sort.SliceStable(cs, func(i, j int) bool {

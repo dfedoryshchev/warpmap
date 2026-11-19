@@ -731,16 +731,43 @@ func TestDiffPassesWhenOnlyATestFileGrows(t *testing.T) {
 		"src/c.ts": "export const c = 1;\nexport function f(x: number) { if (x > 1 && x < 9) { return x; } return 0; }\n",
 	})
 	stdout, _, code = diffOutput(t, dir)
-	if code != 1 || !strings.Contains(stdout, "verdict: RISK UP") || !strings.Contains(stdout, "src/c.ts") {
-		t.Fatalf("diff after growing src/c.ts exited %d and printed\n%swant 1, src/c.ts named and a RISK UP verdict", code, stdout)
+	if code != 0 || !strings.Contains(stdout, "verdict: WARN") || !strings.Contains(stdout, "src/c.ts") {
+		t.Fatalf("diff after growing src/c.ts exited %d and printed\n%swant 0, src/c.ts named and a WARN verdict", code, stdout)
+	}
+	stdout, _, code = diffOutput(t, dir, "--fail-on", "warn")
+	if code != 1 || !strings.Contains(stdout, "verdict: WARN") {
+		t.Fatalf("diff --fail-on warn after growing src/c.ts exited %d and printed\n%swant 1 and a WARN verdict", code, stdout)
 	}
 }
 
-func diffOutput(t *testing.T, dir string) (stdout, stderr string, code int) {
+// one file growing by a lot outweighs two files shrinking by a line each: the
+// complexity term weighs how far files moved, not how many moved each way.
+func TestDiffWeighsComplexityByHowMuchItMoved(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"src/x.ts": "export const x = 1;\n",
+		"src/y.ts": "export const y = 1;\nexport const y2 = 2;\n",
+		"src/z.ts": "export const z = 1;\nexport const z2 = 2;\n",
+	})
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	writeFiles(t, dir, map[string]string{
+		"src/x.ts": "export const x = 1;\n" + strings.Repeat("export function f(a: number) { if (a > 1 && a < 9) { return a; } return 0; }\n", 20),
+		"src/y.ts": "export const y = 1;\n",
+		"src/z.ts": "export const z = 1;\n",
+	})
+	stdout, _, code := diffOutput(t, dir)
+	if code != 0 || !strings.Contains(stdout, "verdict: WARN") || !strings.Contains(stdout, "net complexity +138") {
+		t.Fatalf("diff exited %d and printed\n%swant 0, net complexity +138 and a WARN verdict", code, stdout)
+	}
+}
+
+func diffOutput(t *testing.T, dir string, flags ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	stderr, code = capture(t, &os.Stderr, func() int {
 		var c int
-		stdout, c = captureStdout(t, func() int { return diffCmd([]string{dir}) })
+		stdout, c = captureStdout(t, func() int { return diffCmd(append([]string{dir}, flags...)) })
 		return c
 	})
 	return stdout, stderr, code

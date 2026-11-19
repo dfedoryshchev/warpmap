@@ -18,6 +18,12 @@ inputs:
       untested
     required: false
     default: "true"
+  fail-on:
+    description: >-
+      what the ratchet fails on: risk (a new cycle, god module or dead file) or warn (net
+      complexity growth as well)
+    required: false
+    default: risk
   comment:
     description: write the report as a pull request comment
     required: false
@@ -33,7 +39,9 @@ inputs:
 
 outputs:
   ratchet:
-    description: ok, or risk-up when the change degraded the codebase against the baseline
+    description: >-
+      ok; warn when the code only grew more complex on balance; or risk-up when the change
+      degraded the codebase against the baseline (with fail-on warn, net growth reads risk-up)
     value: ${{ steps.ratchet.outputs.ratchet }}
   risk:
     description: manageable, risky, or skipped when the pull request changes no source file
@@ -63,6 +71,7 @@ runs:
         INPUT_DIRECTORY: ${{ inputs.directory }}
         INPUT_BASE_SHA: ${{ inputs.base-sha }}
         INPUT_FAIL_ON_RISK: ${{ inputs.fail-on-risk }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
         INPUT_COMMENT: ${{ inputs.comment }}
         INPUT_TOKEN: ${{ inputs.token }}
         INPUT_PR_NUMBER: ${{ inputs.pr-number }}

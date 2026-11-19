@@ -783,9 +783,10 @@ func couplingCmd(args []string) int {
 
 func diffCmd(args []string) int {
 	fset := flag.NewFlagSet("diff", flag.ExitOnError)
+	failOn := fset.String("fail-on", "risk", "what exits 1: risk (a structural regression) or warn (net complexity growth too)")
 	dir := arg(parseArgs(fset, args), 0)
-	if dir == "" {
-		fmt.Fprintln(os.Stderr, "usage: warpmap diff <dir>  (compares against .warpmap/baseline.json)")
+	if dir == "" || (*failOn != "risk" && *failOn != "warn") {
+		fmt.Fprintln(os.Stderr, "usage: warpmap diff <dir> [--fail-on risk|warn]  (compares against .warpmap/baseline.json)")
 		return 2
 	}
 	before, err := baseline.Load(dir)
@@ -799,8 +800,8 @@ func diffCmd(args []string) int {
 	}
 	files := sourceFiles(dir)
 	d := baseline.Compare(before, baseline.Capture(dir, files))
-	fmt.Printf("since baseline: edges %+d, cycles %+d, orphans %+d, god-modules %+d\n",
-		d.Edges, d.Cycles, d.Orphans, d.GodModules)
+	fmt.Printf("since baseline: edges %+d, cycles %+d, orphans %+d, god-modules %+d, net complexity %+d\n",
+		d.Edges, d.Cycles, d.Orphans, d.GodModules, d.Net)
 	if len(d.Worsened) > 0 {
 		fmt.Printf("%d files got more complex:\n", len(d.Worsened))
 		// not rel(): a baseline snapshot already stores its keys relative to the
@@ -815,9 +816,16 @@ func diffCmd(args []string) int {
 		fmt.Printf("%d test files grew (not part of the verdict)\n", n)
 	}
 	printFunctionChanges(dir, before.Functions, files)
-	if d.RiskUp() {
+	switch {
+	case d.RiskUp():
 		fmt.Println("verdict: RISK UP - this change made the codebase harder to work on safely")
 		return 1
+	case d.Warn():
+		fmt.Println("verdict: WARN - the code grew more complex on balance; read the list above")
+		if *failOn == "warn" {
+			return 1
+		}
+		return 0
 	}
 	fmt.Println("verdict: ok - no net degradation")
 	return 0
