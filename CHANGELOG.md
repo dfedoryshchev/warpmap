@@ -16,6 +16,14 @@ All notable changes to this project are documented in this file.
   rows as `held_by_one`, and `window_authors`
 - `examples/untangling-a-legacy-module.md`: hotspots, trace, risk, god, coupling and ownership
   on one module before it is split, against a public library at a pinned commit
+- `diff` lists the modules (directories, for now) that started importing each other since the
+  baseline, each pair with the first import behind it, ranked by how many shipped files depend
+  on the target. A new pair between two existing modules is a `WARN` (exit 0, exit 1 with
+  `--fail-on warn`); a pair whose imports name only types, or that touches a directory new since
+  the baseline, is listed and does not warn. The snapshot keeps every import (project-relative,
+  sorted, the type-only ones apart) to make this possible; a snapshot saved by an older version
+  has none, so `diff` says so on stderr until `baseline --force` replaces it. The Action's
+  comment headline names which warning it was
 
 ### Changed
 - `diff` has a second tier: complexity growth is `verdict: WARN` and exits 0, while a new cycle,

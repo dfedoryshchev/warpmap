@@ -763,6 +763,56 @@ func TestDiffWeighsComplexityByHowMuchItMoved(t *testing.T) {
 	}
 }
 
+func moduleProject(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{
+		"db/conn.ts":  "export const conn = 1;\n",
+		"app/main.ts": "import { conn } from \"../db/conn\";\nimport { f } from \"../ui/form\";\nexport const main = conn + f;\n",
+		"ui/form.ts":  "const local = 1;\nexport const f = local;\n",
+	})
+	return dir
+}
+
+func TestDiffNamesANewDependencyBetweenModules(t *testing.T) {
+	dir := moduleProject(t)
+	if _, code := captureStdout(t, func() int { return baselineCmd([]string{dir}) }); code != 0 {
+		t.Fatalf("baseline exited %d, want 0", code)
+	}
+	// the same line count and no branch, so only the new import can move the verdict
+	writeFiles(t, dir, map[string]string{
+		"ui/form.ts": "import { conn } from \"../db/conn\";\nexport const f = conn;\n",
+	})
+	stdout, _, code := diffOutput(t, dir)
+	if code != 0 || !strings.Contains(stdout, "ui -> db") || !strings.Contains(stdout, "db has 2 shipped dependents") {
+		t.Fatalf("diff exited %d and printed\n%swant 0 and ui -> db named with db's 2 shipped dependents", code, stdout)
+	}
+	if !strings.Contains(stdout, "verdict: WARN") || !strings.Contains(stdout, "net complexity +0") {
+		t.Fatalf("diff printed\n%swant a WARN verdict with no complexity change", stdout)
+	}
+	if stdout, _, code = diffOutput(t, dir, "--fail-on", "warn"); code != 1 {
+		t.Fatalf("diff --fail-on warn exited %d and printed\n%swant 1", code, stdout)
+	}
+}
+
+func TestDiffSaysAnOldBaselineHasNoImportList(t *testing.T) {
+	dir := moduleProject(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".warpmap"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"files":3,"edges":2,"cycles":0,"orphans":1,"godModules":0,"complexity":{"db/conn.ts":1,"app/main.ts":3,"ui/form.ts":2},"functions":null}`
+	if err := os.WriteFile(filepath.Join(dir, ".warpmap", "baseline.json"), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeFiles(t, dir, map[string]string{
+		"ui/form.ts": "import { conn } from \"../db/conn\";\nexport const f = conn;\n",
+	})
+	stdout, stderr, _ := diffOutput(t, dir)
+	if strings.Contains(stdout, "ui -> db") || !strings.Contains(stderr, "new dependencies: unavailable") {
+		t.Fatalf("diff against a baseline with no import list printed\n%s\nstderr:\n%swant nothing listed and a note on stderr", stdout, stderr)
+	}
+}
+
 func diffOutput(t *testing.T, dir string, flags ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	stderr, code = capture(t, &os.Stderr, func() int {

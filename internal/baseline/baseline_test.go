@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -137,7 +138,7 @@ func TestTermsNameWhatTrippedTheGate(t *testing.T) {
 			t.Fatalf("tripped = %v, want %v", tripped, want)
 		}
 	}
-	if len(Diff{}.Terms()) != 4 {
+	if len(Diff{}.Terms()) != 5 {
 		t.Fatalf("a quiet diff still lists every term: %+v", Diff{}.Terms())
 	}
 }
@@ -246,6 +247,142 @@ func TestCompareTakesAFileThatMovedAsMoved(t *testing.T) {
 	)
 	if len(d.Worsened) != 0 || len(d.TestsGrew) != 0 || d.RiskUp() {
 		t.Fatalf("moving two files unchanged read as adding them: %+v", d)
+	}
+}
+
+// deps builds a snapshot over the given files with the given value and
+// type-only imports, each written "from>to".
+func deps(files []string, imports, typeImports []string) Snapshot {
+	s := Snapshot{Complexity: map[string]int{}, Imports: map[string][]string{}, TypeImports: map[string][]string{}}
+	for _, f := range files {
+		s.Complexity[f] = 1
+	}
+	add := func(m map[string][]string, pairs []string) {
+		for _, p := range pairs {
+			from, to, _ := strings.Cut(p, ">")
+			m[from] = append(m[from], to)
+		}
+	}
+	add(s.Imports, imports)
+	add(s.TypeImports, typeImports)
+	return s
+}
+
+func tripped(d Diff, name string) bool {
+	for _, term := range d.Terms() {
+		if term.Name == name {
+			return term.Tripped
+		}
+	}
+	return false
+}
+
+var depFiles = []string{"ui/form.ts", "db/conn.ts", "db/conn.test.ts", "app/main.ts", "tests/db.test.ts"}
+
+func TestCompareNamesANewDependencyBetweenModules(t *testing.T) {
+	before := deps(depFiles, []string{"app/main.ts>db/conn.ts", "db/conn.test.ts>db/conn.ts"}, nil)
+	after := deps(depFiles, []string{
+		"app/main.ts>db/conn.ts", "db/conn.test.ts>db/conn.ts",
+		"ui/form.ts>db/conn.ts", "tests/db.test.ts>db/conn.ts",
+	}, nil)
+	d := Compare(before, after)
+	want := []ModuleDep{{From: "ui", To: "db", Imports: 1, FromFile: "ui/form.ts", ToFile: "db/conn.ts", Dependents: 2}}
+	if !slices.Equal(d.NewDeps, want) {
+		t.Fatalf("new deps = %+v, want %+v (a test importer neither counts as a dependent nor opens a pair)", d.NewDeps, want)
+	}
+	if !tripped(d, "new-dependencies") || d.RiskUp() || !d.Warn() {
+		t.Fatalf("a new value dependency between existing modules should warn: risk %v, warn %v", d.RiskUp(), d.Warn())
+	}
+}
+
+func TestCompareListsATypeOnlyModuleDependencyWithoutTrippingTheTerm(t *testing.T) {
+	before := deps(depFiles, []string{"app/main.ts>db/conn.ts"}, nil)
+	after := deps(depFiles, []string{"app/main.ts>db/conn.ts"}, []string{"ui/form.ts>db/conn.ts"})
+	d := Compare(before, after)
+	if len(d.NewDeps) != 1 || !d.NewDeps[0].TypeOnly || d.NewDeps[0].From != "ui" {
+		t.Fatalf("new deps = %+v, want ui -> db marked type-only", d.NewDeps)
+	}
+	if tripped(d, "new-dependencies") || d.Warn() {
+		t.Fatal("a type-only module dependency tripped the term")
+	}
+}
+
+func TestCompareListsADependencyOnANewModuleWithoutTrippingTheTerm(t *testing.T) {
+	before := deps(depFiles, []string{"app/main.ts>db/conn.ts"}, nil)
+	after := deps(append(slices.Clone(depFiles), "billing/charge.ts"),
+		[]string{"app/main.ts>db/conn.ts", "app/main.ts>billing/charge.ts", "billing/charge.ts>db/conn.ts"}, nil)
+	d := Compare(before, after)
+	if len(d.NewDeps) != 2 || !d.NewDeps[0].NewModule || !d.NewDeps[1].NewModule {
+		t.Fatalf("new deps = %+v, want both pairs touching billing marked as a new module", d.NewDeps)
+	}
+	if tripped(d, "new-dependencies") {
+		t.Fatal("wiring in a module the change created tripped the term")
+	}
+}
+
+func TestCompareRanksNewDependenciesByTheTargetsDependents(t *testing.T) {
+	files := []string{"ui/a.ts", "util/fmt.ts", "db/conn.ts", "app/x.ts", "app/y.ts", "api/z.ts"}
+	before := deps(files, []string{"app/x.ts>db/conn.ts", "app/y.ts>db/conn.ts", "api/z.ts>app/x.ts", "api/z.ts>util/fmt.ts"}, nil)
+	after := deps(files, []string{
+		"app/x.ts>db/conn.ts", "app/y.ts>db/conn.ts", "api/z.ts>app/x.ts", "api/z.ts>util/fmt.ts",
+		"ui/a.ts>util/fmt.ts", "ui/a.ts>db/conn.ts",
+	}, nil)
+	d := Compare(before, after)
+	if len(d.NewDeps) != 2 || d.NewDeps[0].To != "db" || d.NewDeps[1].To != "util" {
+		t.Fatalf("new deps = %+v, want ui -> db first", d.NewDeps)
+	}
+	if d.NewDeps[0].Dependents != 4 || d.NewDeps[1].Dependents != 2 {
+		t.Fatalf("dependents = %d and %d, want 4 (app/x, app/y, api/z, ui/a) and 2 (api/z, ui/a)",
+			d.NewDeps[0].Dependents, d.NewDeps[1].Dependents)
+	}
+}
+
+func TestCompareAgainstABaselineWithNoImportListListsNothing(t *testing.T) {
+	before := snap(map[string]int{"ui/form.ts": 1, "db/conn.ts": 1})
+	after := deps([]string{"ui/form.ts", "db/conn.ts"}, []string{"ui/form.ts>db/conn.ts"}, nil)
+	d := Compare(before, after)
+	if !d.DepsUnknown || d.NewDeps != nil || tripped(d, "new-dependencies") {
+		t.Fatalf("diff = %+v, want the import list reported unknown and nothing listed", d)
+	}
+}
+
+func TestCaptureKeepsEveryImportSortedWithTheTypeOnlyOnesApart(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, src string) string {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	files := []string{
+		write("db/conn.ts", "export const conn = 1;\nexport type Conn = number;\n"),
+		write("db/pool.ts", "export const pool = 1;\n"),
+		write("ui/form.ts", "import { pool } from \"../db/pool\";\nimport { conn } from \"../db/conn\";\nimport type { Conn } from \"../db/conn\";\nexport const f = conn + pool;\n"),
+		write("ui/view.ts", "import type { Conn } from \"../db/conn\";\nexport const v = 1;\n"),
+	}
+	s := Capture(dir, files)
+	if got := s.Imports["ui/form.ts"]; !slices.Equal(got, []string{"db/conn.ts", "db/pool.ts"}) {
+		t.Fatalf("imports of ui/form.ts = %v, want both, sorted", got)
+	}
+	if got := s.TypeImports["ui/view.ts"]; !slices.Equal(got, []string{"db/conn.ts"}) {
+		t.Fatalf("type imports of ui/view.ts = %v", got)
+	}
+	if _, ok := s.Imports["ui/view.ts"]; ok {
+		t.Fatal("a type-only import was stored as a value import too")
+	}
+	if err := Save(dir, s); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(dir)
+	if err != nil || loaded.Imports == nil || !slices.Equal(loaded.Imports["ui/form.ts"], s.Imports["ui/form.ts"]) {
+		t.Fatalf("import list did not survive a save: %+v, %v", loaded.Imports, err)
+	}
+	if empty := Capture(dir, files[:2]); empty.Imports == nil {
+		t.Fatal("a project with no imports captured an unknown import list")
 	}
 }
 

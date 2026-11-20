@@ -134,7 +134,11 @@ fi
 case "$ratchet_state:$risk_state" in
 risk-up:*) headline="risk up" ;;
 *:risky) headline="high-blast untested files changed" ;;
-warn:*) headline="more complex on balance" ;;
+warn:*)
+	headline="more complex on balance"
+	grep -q '^verdict: WARN - a module started importing' "$work/ratchet.txt" && headline="new dependencies between modules"
+	grep -q '^verdict: WARN - .*, and a module started importing' "$work/ratchet.txt" && headline="more complex on balance, new dependencies between modules"
+	;;
 *) headline="no net degradation" ;;
 esac
 

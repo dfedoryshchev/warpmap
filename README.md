@@ -190,6 +190,27 @@ stopped 44 of the 60, every one of them on that term alone. so the term is weigh
 shipped files gained, less what they lost and the scores of removed files - and a positive net
 warns. `--fail-on warn` makes a warning exit 1 as well, for a project that wants it strict.
 
+a module that starts importing another it did not import at the baseline is also a `WARN`. a
+module is a directory, and `diff` lists each new pair with the first import behind it, ranked by
+how many shipped files (tests left out) depend on the target, so a new path into something half
+the code relies on comes first:
+
+```
+$ warpmap diff .
+since baseline: edges +0, cycles +0, orphans +0, god-modules +0, net complexity +0
+1 new dependency between modules (a module is a directory), most depended-on target first:
+  src/ui -> src/db  1 import src/ui/form.ts -> src/db/conn.ts; src/db has 3 shipped dependents
+verdict: WARN - a module started importing one it did not import before; read the list above
+```
+
+a pair whose imports all name only types is listed, marked `types only`, and does not warn,
+since the compiler erases those imports. neither does a pair with a directory that did not exist
+at the baseline: wiring in a new module is how a feature lands. imports made from or into test
+files are left out. it is a warning and not `RISK UP` because a directory is a rough stand-in for
+a module, and a pull request that passed before should not start failing on it. a snapshot saved
+by an older version holds no import list: `diff` says so on stderr and lists nothing until
+`baseline --force` replaces it.
+
 test files (the ones `testgap` treats as tests) are left out of the complexity count both ways, so
 adding or growing tests cannot move the verdict. `diff` prints them on a line of their own,
 `3 test files grew (not part of the verdict)`, and a snapshot saved by an earlier version needs no
@@ -258,7 +279,7 @@ cut reaches, what catches a mistake, what moves with it - run against a public l
 
 **guard changes** (the ratchet)
 - `baseline <dir>` - snapshot the current state; exits 2 if a snapshot exists, `--force` replaces it
-- `diff <dir>` - did the change make the codebase better or worse? exits 1 on a structural regression (and on net complexity growth with `--fail-on warn`), 2 when there is no baseline to compare against
+- `diff <dir>` - did the change make the codebase better or worse? lists the modules that started importing each other; exits 1 on a structural regression (and on a warning with `--fail-on warn`), 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them, ties broken on direct
   shipped importers. `--json` prints `{"untested": <count>, "types_only": <count>, "files": [...]}`,
@@ -538,7 +559,7 @@ pushing again edits that comment rather than adding another one.
 | `directory` | `.` | the directory to analyse, relative to the repository root |
 | `base-sha` | the pull request's base commit | what the baseline is taken from |
 | `fail-on-risk` | `true` | `false` still reports, and leaves the job green |
-| `fail-on` | `risk` | `warn` fails the job on net complexity growth as well |
+| `fail-on` | `risk` | `warn` fails the job on a warning as well: net complexity growth, or a new dependency between modules |
 | `comment` | `true` | `false` gates without writing to the pull request |
 | `token` | `github.token` | needs permission to write pull request comments |
 | `pr-number` | the pull request's number | which pull request to comment on |

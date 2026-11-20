@@ -21,7 +21,7 @@ inputs:
   fail-on:
     description: >-
       what the ratchet fails on: risk (a new cycle, god module or dead file) or warn (net
-      complexity growth as well)
+      complexity growth, or a new dependency between existing modules, as well)
     required: false
     default: risk
   comment:
@@ -40,8 +40,9 @@ inputs:
 outputs:
   ratchet:
     description: >-
-      ok; warn when the code only grew more complex on balance; or risk-up when the change
-      degraded the codebase against the baseline (with fail-on warn, net growth reads risk-up)
+      ok; warn when the code only grew more complex on balance or a module started importing
+      another it did not before; or risk-up when the change degraded the codebase against the
+      baseline (with fail-on warn, a warning reads risk-up)
     value: ${{ steps.ratchet.outputs.ratchet }}
   risk:
     description: manageable, risky, or skipped when the pull request changes no source file

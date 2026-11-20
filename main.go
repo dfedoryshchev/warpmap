@@ -816,12 +816,19 @@ func diffCmd(args []string) int {
 		fmt.Printf("%d test files grew (not part of the verdict)\n", n)
 	}
 	printFunctionChanges(dir, before.Functions, files)
+	printModuleDeps(dir, d)
 	switch {
 	case d.RiskUp():
 		fmt.Println("verdict: RISK UP - this change made the codebase harder to work on safely")
 		return 1
 	case d.Warn():
-		fmt.Println("verdict: WARN - the code grew more complex on balance; read the list above")
+		var why []string
+		for _, t := range d.Terms() {
+			if t.Tripped {
+				why = append(why, warnReason[t.Name])
+			}
+		}
+		fmt.Printf("verdict: WARN - %s; read the list above\n", strings.Join(why, ", and "))
 		if *failOn == "warn" {
 			return 1
 		}
@@ -829,6 +836,50 @@ func diffCmd(args []string) int {
 	}
 	fmt.Println("verdict: ok - no net degradation")
 	return 0
+}
+
+var warnReason = map[string]string{
+	"complexity":       "the code grew more complex on balance",
+	"new-dependencies": "a module started importing one it did not import before",
+}
+
+const shownModuleDeps = 10
+
+func printModuleDeps(dir string, d baseline.Diff) {
+	if d.DepsUnknown {
+		fmt.Fprintf(os.Stderr, "new dependencies: unavailable - the baseline holds no import list; `warpmap baseline --force %s` takes one\n", dir)
+		return
+	}
+	if len(d.NewDeps) == 0 {
+		return
+	}
+	heading := fmt.Sprintf("%d new dependencies", len(d.NewDeps))
+	if len(d.NewDeps) == 1 {
+		heading = "1 new dependency"
+	}
+	fmt.Printf("%s between modules (a module is a directory), most depended-on target first:\n", heading)
+	for _, m := range d.NewDeps[:min(shownModuleDeps, len(d.NewDeps))] {
+		imports := "1 import"
+		if m.Imports > 1 {
+			imports = fmt.Sprintf("%d imports, first", m.Imports)
+		}
+		noun := "dependents"
+		if m.Dependents == 1 {
+			noun = "dependent"
+		}
+		note := ""
+		switch {
+		case m.TypeOnly:
+			note = " - types only, not part of the verdict"
+		case m.NewModule:
+			note = " - a module new since the baseline, not part of the verdict"
+		}
+		fmt.Printf("  %s -> %s  %s %s -> %s; %s has %d shipped %s%s\n",
+			m.From, m.To, imports, m.FromFile, m.ToFile, m.To, m.Dependents, noun, note)
+	}
+	if len(d.NewDeps) > shownModuleDeps {
+		fmt.Printf("  and %d more\n", len(d.NewDeps)-shownModuleDeps)
+	}
 }
 
 // captureFunctions measures each function with lizard when it is on PATH. With
