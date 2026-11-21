@@ -71,6 +71,9 @@ All notable changes to this project are documented in this file.
 - `testgap` prints `direct=` beside `blast=`, the shipped files that import the file itself, and
   breaks a tie in blast on it, then on the path. On a project that re-exports through barrels many
   files share one blast radius, and the order among them was the walk's
+- The GitHub Action's pull request comment no longer carries `diff`'s notes about what it could
+  not measure ("per-function: unavailable ... with lizard on PATH"), which a reader of the comment
+  cannot act on. They stay on stderr and so in the job log
 
 ## 0.2.0 - 2026-10-28
 

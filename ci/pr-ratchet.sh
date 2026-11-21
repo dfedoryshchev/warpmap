@@ -84,8 +84,13 @@ find "$target" -mindepth 1 -maxdepth 1 ! -name '.warpmap' -exec rm -rf {} + ||
 git archive HEAD | tar -x -C "$tree" || die "cannot export the checked-out commit"
 mkdir -p "$target"
 
-"$bin" diff --fail-on "$fail_on" "$target" >"$work/ratchet.txt" 2>&1
-case $? in
+# stderr is kept apart: diff's notes about what it could not measure ("per-function: unavailable
+# ... with lizard on PATH") tell the person running it what to install, which a reader of the
+# comment cannot act on. they go to the job log instead.
+"$bin" diff --fail-on "$fail_on" "$target" >"$work/ratchet.txt" 2>"$work/ratchet.err"
+ratchet_code=$?
+cat "$work/ratchet.err" >&2
+case $ratchet_code in
 0) ratchet_state="ok" ;;
 1) ratchet_state="risk-up" ;;
 *)
