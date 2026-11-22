@@ -247,6 +247,8 @@ what they did and did not mean, is in [examples/worked-audit.md](examples/worked
 the four questions to answer before splitting the file everyone edits - is it the one, how far a
 cut reaches, what catches a mistake, what moves with it - run against a public library, are in
 [examples/untangling-a-legacy-module.md](examples/untangling-a-legacy-module.md).
+what `trace` and `risk` said before two merged refactors, checked against what each one changed,
+a hit and a miss, is in [examples/blast-radius-before-a-refactor.md](examples/blast-radius-before-a-refactor.md).
 
 ## what it does
 

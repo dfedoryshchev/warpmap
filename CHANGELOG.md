@@ -16,6 +16,8 @@ All notable changes to this project are documented in this file.
   rows as `held_by_one`, and `window_authors`
 - `examples/untangling-a-legacy-module.md`: hotspots, trace, risk, god, coupling and ownership
   on one module before it is split, against a public library at a pinned commit
+- `examples/blast-radius-before-a-refactor.md`: trace and risk at the parent of two merged
+  refactor pull requests in a public library, checked against what each one changed
 - `diff` lists the modules (directories, for now) that started importing each other since the
   baseline, each pair with the first import behind it, ranked by how many shipped files depend
   on the target. A new pair between two existing modules is a `WARN` (exit 0, exit 1 with
