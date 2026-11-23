@@ -7,16 +7,18 @@ import (
 )
 
 // Orphans returns files that nothing imports - candidate dead code. entry points
-// (index/main/app, *.d.ts, test files) legitimately have no importers, so they are
-// excluded to cut the noise.
-func Orphans(g Graph) []string {
+// legitimately have no importers, so they are excluded to cut the noise: index/main/app,
+// *.d.ts, test files and files under a test directory, tool configs (`vite.config.ts`),
+// and a Python package's `__init__.py` / `__main__.py`. dir is the project root the
+// files were walked under; only the part of a path below it is read for a test directory.
+func Orphans(dir string, g Graph) []string {
 	imported := map[string]bool{}
 	for _, e := range g.Edges {
 		imported[e.To] = true
 	}
 	var out []string
 	for _, f := range g.Files {
-		if imported[f] || isEntryPoint(f) {
+		if imported[f] || isEntryPoint(relTo(dir, f)) {
 			continue
 		}
 		out = append(out, f)
@@ -25,15 +27,54 @@ func Orphans(g Graph) []string {
 	return out
 }
 
-func isEntryPoint(f string) bool {
-	base := strings.ToLower(filepath.Base(f))
+func relTo(dir, f string) string {
+	r, err := filepath.Rel(dir, f)
+	if err != nil {
+		return f
+	}
+	return r
+}
+
+func isEntryPoint(rel string) bool {
+	base := strings.ToLower(filepath.Base(rel))
 	switch {
 	case strings.HasPrefix(base, "index."), strings.HasPrefix(base, "main."), strings.HasPrefix(base, "app."):
 		return true
 	case strings.HasSuffix(base, ".d.ts"):
 		return true
-	case IsTestName(base):
+	case base == "__init__.py", base == "__main__.py":
 		return true
+	case isToolConfig(base):
+		return true
+	case IsTestPath(rel):
+		return true
+	}
+	return false
+}
+
+// isToolConfig reports whether a lower-cased file name is `<tool>.config.<ext>`, which
+// the tool loads by name and nothing imports.
+func isToolConfig(base string) bool {
+	for _, ext := range []string{".ts", ".mts", ".cts", ".js", ".mjs", ".cjs"} {
+		if strings.HasSuffix(base, ".config"+ext) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsTestPath reports whether a file is a test by its name or by sitting under a test
+// directory. rel is its path relative to the project root: a directory above the
+// project says nothing about its files.
+func IsTestPath(rel string) bool {
+	if IsTestName(filepath.Base(rel)) {
+		return true
+	}
+	lf := "/" + strings.ToLower(filepath.ToSlash(rel))
+	for _, d := range []string{"/__tests__/", "/__typetest__/", "/tests/", "/test/", "/e2e/"} {
+		if strings.Contains(lf, d) {
+			return true
+		}
 	}
 	return false
 }

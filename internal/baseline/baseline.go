@@ -144,7 +144,7 @@ func Capture(dir string, files []string) Snapshot {
 		Files:       len(g.Files),
 		Edges:       len(g.Edges),
 		Cycles:      len(graph.Cycles(g)),
-		Orphans:     len(graph.Orphans(g)),
+		Orphans:     len(graph.Orphans(dir, g)),
 		GodModules:  godCount(g),
 		Complexity:  map[string]int{},
 		Imports:     map[string][]string{},

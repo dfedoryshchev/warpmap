@@ -80,7 +80,7 @@ func Findings(g graph.Graph, dir string) []Finding {
 			Files:          files,
 		})
 	}
-	if files := relPaths(dir, graph.Orphans(g)); len(files) > 0 {
+	if files := relPaths(dir, graph.Orphans(dir, g)); len(files) > 0 {
 		sort.Strings(files)
 		fs = append(fs, Finding{
 			Severity:       Low,

@@ -10,16 +10,7 @@ import (
 // IsTest reports whether a file looks like a test. rel is its path relative to
 // the project root: a directory above the project says nothing about its files.
 func IsTest(rel string) bool {
-	if graph.IsTestName(filepath.Base(rel)) {
-		return true
-	}
-	lf := "/" + strings.ToLower(filepath.ToSlash(rel))
-	for _, d := range []string{"/__tests__/", "/__typetest__/", "/tests/", "/test/", "/e2e/"} {
-		if strings.Contains(lf, d) {
-			return true
-		}
-	}
-	return false
+	return graph.IsTestPath(rel)
 }
 
 // Kind classifies a test file as unit / integration / e2e by convention.

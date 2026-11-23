@@ -180,7 +180,8 @@ verdict: WARN - the code grew more complex on balance; read the list above
 
 the verdict has two tiers. a structural regression is `RISK UP`: more import cycles, more god
 modules, or more dead code (`orphans`, files nothing imports; entry points such as `index`,
-`main`, `app`, `.d.ts` and test files never count). dead code is judged on the net count, so
+`main`, `app`, `.d.ts`, test files and test directories, `*.config.ts`-style tool configs and
+Python `__init__.py` / `__main__.py` never count). dead code is judged on the net count, so
 deleting one dead file balances adding another.
 
 complexity growing is a `WARN`. a feature adds code, and a gate that fails every pull request

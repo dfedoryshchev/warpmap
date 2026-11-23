@@ -461,7 +461,7 @@ func deadCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap dead <dir>")
 		return 2
 	}
-	orphans := graph.Orphans(graph.Build(sourceFiles(dir)))
+	orphans := graph.Orphans(dir, graph.Build(sourceFiles(dir)))
 	fmt.Printf("%d files nothing imports (candidate dead code):\n", len(orphans))
 	for _, f := range orphans {
 		fmt.Printf("  %s\n", rel(dir, f))

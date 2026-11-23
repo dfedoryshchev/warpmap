@@ -14,7 +14,7 @@ func sample() Graph {
 }
 
 func TestOrphans(t *testing.T) {
-	got := Orphans(sample())
+	got := Orphans(".", sample())
 	if len(got) != 1 || got[0] != "c.ts" {
 		t.Fatalf("want [c.ts] (nothing imports it), got %v", got)
 	}
@@ -22,8 +22,27 @@ func TestOrphans(t *testing.T) {
 
 func TestOrphansSkipsPythonAndTypeTests(t *testing.T) {
 	g := Graph{Files: []string{"src/form.test-d.ts", "src/a.spec-d.ts", "pkg/test_a.py", "pkg/a_test.py", "pkg/conftest.py", "pkg/unused.py"}}
-	if got := Orphans(g); len(got) != 1 || got[0] != "pkg/unused.py" {
+	if got := Orphans(".", g); len(got) != 1 || got[0] != "pkg/unused.py" {
 		t.Fatalf("want [pkg/unused.py], got %v", got)
+	}
+}
+
+func TestOrphansSkipsFilesAToolLoads(t *testing.T) {
+	g := Graph{Files: []string{
+		"vite.config.ts", "dev/vitest.config.mts", "jest.config.cjs", "tests/setup.ts",
+		"src/__tests__/helper.ts", "pkg/__init__.py", "pkg/__main__.py", "src/unused.ts", "pkg/unused.py",
+	}}
+	want := "pkg/unused.py,src/unused.ts"
+	if got := strings.Join(Orphans(".", g), ","); got != want {
+		t.Fatalf("want %s, got %s", want, got)
+	}
+}
+
+func TestOrphansReadsTestDirsBelowTheProject(t *testing.T) {
+	g := Graph{Files: []string{"/work/tests/proj/src/unused.ts", "/work/tests/proj/tests/setup.ts"}}
+	got := Orphans("/work/tests/proj", g)
+	if len(got) != 1 || got[0] != "/work/tests/proj/src/unused.ts" {
+		t.Fatalf("a directory above the project says nothing about its files, got %v", got)
 	}
 }
 

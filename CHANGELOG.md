@@ -51,6 +51,14 @@ All notable changes to this project are documented in this file.
   code.
 
 ### Fixed
+- `dead` no longer lists files a tool loads by name or a runner sets up. Tool configs
+  (`*.config.ts`, `.mts`, `.cts`, `.js`, `.mjs`, `.cjs`), files under a test directory
+  (`tests/`, `test/`, `__tests__/`, `e2e/`) and a Python package's `__init__.py` and
+  `__main__.py` are entry points, in `dead`, `report` and the `diff` dead-code term alike. The
+  test-directory rule is now one predicate shared with `testgap`. A snapshot saved by an older
+  version counts more dead files, so it only reads lower after upgrading and never trips the
+  gate. Data a test reads from disk is not an import, so such files (fixture sources copied
+  into a temporary workspace) still list
 - `diff` no longer counts a test file that grew as the code getting worse. Test files are left
   out of the complexity term and printed on their own line (`N test files grew`), so adding tests
   cannot trip `RISK UP`
