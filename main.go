@@ -966,10 +966,7 @@ func reportCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap report <dir>")
 		return 2
 	}
-	files := sourceFiles(dir)
-	commits, window := metrics.ProjectCommits(dir, files, int(*months))
-	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
-	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
+	r := buildReport(dir, int(*months))
 	doc := r.Markdown()
 	if *asJSON {
 		pack, err := r.JSON()
@@ -988,6 +985,23 @@ func reportCmd(args []string) int {
 		fmt.Print(doc)
 	}
 	return 0
+}
+
+// buildReport is the audit `report` and `collect` both write, with the run
+// facts only the command knows put into its scope.
+func buildReport(dir string, months int) report.Report {
+	files := sourceFiles(dir)
+	commits, window := metrics.ProjectCommits(dir, files, months)
+	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
+	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
+	r.Version = version
+	r.Window = window
+	for _, f := range rankedFiles(dir) {
+		if !sourceExt[filepath.Ext(f)] {
+			r.Unparsed = append(r.Unparsed, f)
+		}
+	}
+	return r
 }
 
 // dashboardCmd renders the hotspot ranking as one html page. It follows

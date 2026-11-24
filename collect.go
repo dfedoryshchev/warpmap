@@ -16,7 +16,6 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
-	"github.com/dfedoryshchev/warpmap/internal/report"
 )
 
 var findTool = exec.LookPath
@@ -56,10 +55,7 @@ func collectCmd(args []string) int {
 
 	folder := map[string][]byte{}
 	files := sourceFiles(dir)
-	commits, window := metrics.ProjectCommits(dir, files, int(*months))
-	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
-	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
-	pack, err := r.JSON()
+	pack, err := buildReport(dir, int(*months)).JSON()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

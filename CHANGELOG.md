@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Added
+- `report` opens with the scope of the run and its limitations, in markdown and as `scope` and
+  `limitations` in the json. The scope pins the commit read (and says when the tree had
+  uncommitted changes), the release, the churn window, and a sha256 over the analysed files a
+  client can recompute with `sha256sum`; it says no network call was made, and gives a coverage
+  word (`complete`, `partial`, `unavailable`) with the checks that could not run named in
+  `unsupported_rule_ids`. The limitations are counts from the run: files parsed by extension,
+  source files in languages the graph does not parse, import specifiers resolved and dropped
+  (and how many of the dropped were relative), and type-only edges
+- Every finding carries a stable `id`, `wm-<kind>-<hash>` over its kind and files, the same on
+  any machine, so a later run can be checked against an earlier one finding by finding
 - `hotspots`, `ownership` and `testgap` take `--json`, one shape per command, with
   project-relative paths. A `hotspots` row carries `loc` beside `complexity`, and the top level
   names which measure produced the complexity (`cx` or `ccn`)

@@ -133,15 +133,45 @@ $ warpmap report . --json | head -4
 {
   "files": 8,
   "edges": 7,
-  "findings": [
+  "scope": {
 ```
 
-each finding carries its `severity`, `kind`, `detail` and `recommendation`, and `files`: every
+both formats open with the scope of the run and its limitations, ahead of anything they qualify.
+the scope pins what was read: the project, the commit (`HEAD` of the repo you pointed at, marked
+`with uncommitted changes` when the tree under that directory has moved past it, or `none` outside
+git), the warpmap release, the churn window, and a sha256 over the analysed files. that digest is
+the list `sha256sum` prints for them, one `<hash>  <path>` line per file sorted by path, hashed
+again, so whoever holds the json can check it against their checkout with no warpmap at all:
+
+```
+$ jq -r '.scope.inputs.each[].file' audit.json | LC_ALL=C sort | xargs -d '\n' sha256sum --text | sha256sum --text
+```
+
+it hashes the bytes on disk, so a checkout with other line endings gives another digest. the
+scope also says whether a network call was made (`report` makes none; `explain` is the one command
+that can) and gives a coverage word: `complete` when every check ran on every source file found,
+`partial` when a check could not run or some files are in a language the graph does not parse,
+`unavailable` when nothing could be parsed. the checks that could not run are named by id
+(`coupling` and `held-by-one` need git history), as `unsupported_rule_ids` in the json.
+
+the limitations are counts from the run itself: the files parsed, by extension; source files found
+in other languages, which get no imports, findings or hotspots; how many import specifiers resolved
+to a file in the project and how many did not, and how many of those were relative to the importing
+file (a package import is expected to leave the project; a relative one that resolves to nothing is
+a stylesheet, an asset, or an import warpmap missed); and how many edges name only types. warpmap
+reads source text and never builds, installs or runs the project, and the report says so.
+
+each finding carries an `id`, `severity`, `kind`, `detail` and `recommendation`, and `files`: every
 file behind it, the god module itself, the files of one import cycle, or the files nothing
 imports. a cycle is every file that reaches the others through imports, reported once however
 many loops run through it; when it is a single loop its files are in the order they import each
 other, otherwise in path order. the `detail` names them too, in both formats, and stops
 after ten with `and <n> more`; `files` always holds the whole list.
+
+the `id` is `wm-<kind>-<hash>`, the hash taken over the kind and the project-relative files behind
+the finding, so a later run on the same code, on any machine, gives the same id and a fix can be
+tracked against it. a god module's id follows its file and a cycle's follows its set of files;
+there is one dead-code finding per project, so its id stays put as its files are deleted.
 
 each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
 markdown table prints. files are named relative to the project you pointed at, exactly as

@@ -19,6 +19,20 @@ type Edge struct {
 type Graph struct {
 	Files []string
 	Edges []Edge
+	// Specifiers is what Build made of the import specifiers it read; it is not
+	// part of the graph's json.
+	Specifiers Specifiers `json:"-"`
+}
+
+// Specifiers counts the import specifiers the files name: the ones that
+// resolved to a file in the project, and the ones that did not. A package
+// import is expected to leave the project; DroppedRelative is the share that
+// was spelled relative to the importing file and still found no parsed file, a
+// stylesheet or an asset as well as an import the resolver missed.
+type Specifiers struct {
+	Kept            int
+	Dropped         int
+	DroppedRelative int
 }
 
 // Missing returns the given files, each relative to dir and named as the caller
@@ -354,8 +368,13 @@ func Build(files []string) Graph {
 		for _, imp := range extractImports(f, string(src)) {
 			to := resolve(p, f, imp.Spec)
 			if to == "" {
+				g.Specifiers.Dropped++
+				if strings.HasPrefix(imp.Spec, ".") {
+					g.Specifiers.DroppedRelative++
+				}
 				continue
 			}
+			g.Specifiers.Kept++
 			key := f + "\x00" + to
 			if i, ok := seen[key]; ok {
 				g.Edges[i].TypeOnly = g.Edges[i].TypeOnly && imp.TypeOnly

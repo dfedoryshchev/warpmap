@@ -1,6 +1,8 @@
 package report
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -20,6 +22,7 @@ const (
 const namedFiles = 10
 
 type Finding struct {
+	ID             string   `json:"id"`
 	Severity       Severity `json:"severity"`
 	Kind           string   `json:"kind"`
 	Detail         string   `json:"detail"`
@@ -50,8 +53,32 @@ func name(files []string, sep string) string {
 	return fmt.Sprintf("%s, and %d more", strings.Join(files[:namedFiles], sep), len(files)-namedFiles)
 }
 
+// findingID is the one id scheme warpmap's own findings use: wm-<kind>-<hash>,
+// the hash taken over the kind and the finding's subject, project-relative and
+// in path order. A god module's subject is its file and a cycle's its files;
+// the dead-code finding has none, being one per project, so deleting some of
+// its files keeps its id.
+func findingID(kind string, subject []string) string {
+	s := append([]string{}, subject...)
+	sort.Strings(s)
+	sum := sha256.Sum256([]byte(kind + "\n" + strings.Join(s, "\n")))
+	return "wm-" + kind + "-" + hex.EncodeToString(sum[:4])
+}
+
 // Findings turns the graph analyses into ranked, actionable findings.
 func Findings(g graph.Graph, dir string) []Finding {
+	fs := findings(g, dir)
+	for i, f := range fs {
+		subject := f.Files
+		if f.Kind == "dead-code" {
+			subject = nil
+		}
+		fs[i].ID = findingID(f.Kind, subject)
+	}
+	return fs
+}
+
+func findings(g graph.Graph, dir string) []Finding {
 	var fs []Finding
 	for _, m := range graph.GodModules(g) {
 		if !m.IsGod() {

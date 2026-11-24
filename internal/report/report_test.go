@@ -20,6 +20,7 @@ type decoded struct {
 	Files    int `json:"files"`
 	Edges    int `json:"edges"`
 	Findings []struct {
+		ID             string   `json:"id"`
 		Severity       string   `json:"severity"`
 		Kind           string   `json:"kind"`
 		Detail         string   `json:"detail"`
@@ -68,7 +69,7 @@ func TestJSONStatesWhatTheMarkdownStates(t *testing.T) {
 	kinds := map[string]bool{}
 	for i, f := range got.Findings {
 		kinds[f.Kind] = true
-		line := fmt.Sprintf("- **[%s] %s** - %s\n  - %s\n", f.Severity, f.Kind, f.Detail, f.Recommendation)
+		line := fmt.Sprintf("- `%s` **[%s] %s** - %s\n  - %s\n", f.ID, f.Severity, f.Kind, f.Detail, f.Recommendation)
 		if !strings.Contains(md, line) {
 			t.Fatalf("finding %d is not in the markdown:\n%s", i, line)
 		}

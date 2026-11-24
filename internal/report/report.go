@@ -26,6 +26,26 @@ type Report struct {
 	// Authors is how many people made the commits in the window.
 	Authors int
 	Held    []metrics.Held
+
+	// Commit is HEAD of the repo at Dir, "" when Dir is not in one; Dirty is
+	// whether the tree under Dir had moved past it.
+	Commit string
+	Dirty  bool
+	// Inputs are the analysed files with their sha256, in path order, and
+	// Digest the sha256 of the list sha256sum prints for them.
+	Inputs []Input
+	Digest string
+	// Parsed counts the analysed files by extension.
+	Parsed        map[string]int
+	Specifiers    graph.Specifiers
+	TypeOnlyEdges int
+
+	// the caller knows these and Build does not: the release that ran, the
+	// history churn was read from, and the files found in languages the graph
+	// does not parse.
+	Version  string
+	Window   metrics.Window
+	Unparsed []string
 }
 
 // OneAuthor is what the report and `warpmap ownership` say instead of listing
@@ -45,7 +65,17 @@ func Build(dir string, files []string, churn metrics.Churn, commits []metrics.Co
 		Hotspots: metrics.Hotspots(dir, files, churn),
 		Findings: Findings(g, dir),
 		Authors:  len(metrics.Authors(commits)),
+
+		Specifiers: g.Specifiers,
+		Parsed:     byExt(files),
 	}
+	for _, e := range g.Edges {
+		if e.TypeOnly {
+			r.TypeOnlyEdges++
+		}
+	}
+	r.Commit, r.Dirty = head(dir)
+	r.Inputs, r.Digest = inputs(dir, files)
 	if r.Authors != 1 {
 		var checked []string
 		for _, h := range top(r.Hotspots, topHotspots) {
@@ -71,6 +101,7 @@ func (r Report) Markdown() string {
 	var b strings.Builder
 	b.WriteString("# warpmap audit\n\n")
 	fmt.Fprintf(&b, "- files: %d\n- import edges: %d\n- findings: %d\n\n", r.Files, r.Edges, len(r.Findings))
+	r.writeScope(&b)
 
 	b.WriteString("## lead signals\n\n")
 	b.WriteString("### files that change together with no import between them\n\n")
@@ -102,7 +133,7 @@ func (r Report) Markdown() string {
 	if len(r.Findings) > 0 {
 		b.WriteString("## findings\n\n")
 		for _, f := range r.Findings {
-			fmt.Fprintf(&b, "- **[%s] %s** - %s\n  - %s\n", f.Severity, f.Kind, f.Detail, f.Recommendation)
+			fmt.Fprintf(&b, "- `%s` **[%s] %s** - %s\n  - %s\n", f.ID, f.Severity, f.Kind, f.Detail, f.Recommendation)
 		}
 		b.WriteString("\n")
 	}
@@ -116,13 +147,15 @@ func (r Report) Markdown() string {
 }
 
 type pack struct {
-	Files         int       `json:"files"`
-	Edges         int       `json:"edges"`
-	Coupling      []Coupled `json:"coupling"`
-	WindowAuthors int       `json:"window_authors"`
-	HeldByOne     []held    `json:"held_by_one"`
-	Findings      []Finding `json:"findings"`
-	Hotspots      []ranked  `json:"hotspots"`
+	Files         int         `json:"files"`
+	Edges         int         `json:"edges"`
+	Scope         scope       `json:"scope"`
+	Limitations   limitations `json:"limitations"`
+	Coupling      []Coupled   `json:"coupling"`
+	WindowAuthors int         `json:"window_authors"`
+	HeldByOne     []held      `json:"held_by_one"`
+	Findings      []Finding   `json:"findings"`
+	Hotspots      []ranked    `json:"hotspots"`
 }
 
 type held struct {
@@ -174,6 +207,8 @@ func (r Report) JSON() ([]byte, error) {
 		Files:         r.Files,
 		Edges:         r.Edges,
 		WindowAuthors: r.Authors,
+		Scope:         r.scopeJSON(),
+		Limitations:   r.limitationsJSON(),
 		Coupling:      CoupledPairs(topCoupled(r.Coupling)),
 		HeldByOne:     []held{},
 		Findings:      []Finding{},
