@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
+	"github.com/dfedoryshchev/warpmap/internal/signal"
 )
 
 // Input is one analysed file and the sha256 of its bytes on disk.
@@ -70,8 +71,9 @@ func byExt(files []string) map[string]int {
 }
 
 // Coverage is complete when every check ran on every source file the walk
-// found, partial when some check could not run or some files are in a language
-// the graph does not parse, and unavailable when there was nothing to parse.
+// found, partial when some check could not run, some files are in a language
+// the graph does not parse or some source's findings could not be read, and
+// unavailable when there was nothing to parse.
 // The second value names the checks that could not run.
 func (r Report) Coverage() (string, []string) {
 	unsupported := []string{}
@@ -86,7 +88,7 @@ func (r Report) Coverage() (string, []string) {
 	switch {
 	case r.Files == 0:
 		return "unavailable", unsupported
-	case len(unsupported) > 0 || len(r.Unparsed) > 0:
+	case len(unsupported) > 0 || len(r.Unparsed) > 0 || len(r.Unread) > 0:
 		return "partial", unsupported
 	}
 	return "complete", unsupported
@@ -183,6 +185,9 @@ func (r Report) writeScope(b *strings.Builder) {
 		fmt.Fprintf(b, " (%.0f%%)", 100*float64(r.TypeOnlyEdges)/float64(r.Edges))
 	}
 	b.WriteString("\n")
+	for _, u := range r.Unread {
+		fmt.Fprintf(b, "- not read: %s - %s\n", u.Tool, u.Error)
+	}
 	b.WriteString("- " + notBuilt + "\n\n")
 }
 
@@ -212,11 +217,12 @@ type window struct {
 }
 
 type limitations struct {
-	Parsed        map[string]int `json:"parsed"`
-	NotParsed     map[string]int `json:"not_parsed"`
-	Specifiers    specifiers     `json:"specifiers"`
-	Edges         int            `json:"edges"`
-	TypeOnlyEdges int            `json:"type_only_edges"`
+	Parsed        map[string]int  `json:"parsed"`
+	NotParsed     map[string]int  `json:"not_parsed"`
+	Specifiers    specifiers      `json:"specifiers"`
+	Edges         int             `json:"edges"`
+	TypeOnlyEdges int             `json:"type_only_edges"`
+	Unread        []signal.Unread `json:"unread_sources"`
 }
 
 type specifiers struct {
@@ -254,5 +260,6 @@ func (r Report) limitationsJSON() limitations {
 		Specifiers:    specifiers{Resolved: r.Specifiers.Kept, Dropped: r.Specifiers.Dropped, DroppedRelative: r.Specifiers.DroppedRelative},
 		Edges:         r.Edges,
 		TypeOnlyEdges: r.TypeOnlyEdges,
+		Unread:        append([]signal.Unread{}, r.Unread...),
 	}
 }

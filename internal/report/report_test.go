@@ -73,8 +73,8 @@ func TestJSONStatesWhatTheMarkdownStates(t *testing.T) {
 		if !strings.Contains(md, line) {
 			t.Fatalf("finding %d is not in the markdown:\n%s", i, line)
 		}
-		if f.Severity != string(r.Findings[i].Severity) || f.Kind != r.Findings[i].Kind {
-			t.Fatalf("finding %d reordered: json has [%s] %s, the report has [%s] %s", i, f.Severity, f.Kind, r.Findings[i].Severity, r.Findings[i].Kind)
+		if f.Severity != string(r.Findings[i].Severity) || f.Kind != r.Findings[i].RuleID {
+			t.Fatalf("finding %d reordered: json has [%s] %s, the report has [%s] %s", i, f.Severity, f.Kind, r.Findings[i].Severity, r.Findings[i].RuleID)
 		}
 	}
 	for _, k := range []string{"god-module", "cycle", "dead-code"} {

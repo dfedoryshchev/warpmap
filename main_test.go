@@ -948,7 +948,7 @@ func TestGodReportAndBaselineAgreeOnWhatAGodModuleIs(t *testing.T) {
 
 		found := 0
 		for _, f := range report.Findings(graph.Build(files), dir) {
-			if f.Kind == "god-module" {
+			if f.RuleID == "god-module" {
 				found++
 			}
 		}

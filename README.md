@@ -173,6 +173,18 @@ the finding, so a later run on the same code, on any machine, gives the same id 
 tracked against it. a god module's id follows its file and a cycle's follows its set of files;
 there is one dead-code finding per project, so its id stays put as its files are deleted.
 
+findings have one shape whichever tool produced them, so a finding read from another tool's
+output sits in the same list as warpmap's own: `source_tool`, `rule_id` (the tool's own name for
+the check), `severity`, `message`, `locations` (each a `file` and, when the finding points inside
+it, a 1-based `line`) and, for an ingested finding, `raw`, the record as the tool wrote it.
+warpmap's own findings have `source_tool` `warpmap`, their kind as `rule_id`, their detail as
+`message` and their files as `locations`; `kind`, `detail` and `files` stay alongside. only
+warpmap's own findings carry an `id`: an ingested one is known by its tool and rule, and warpmap
+never gives it an id of its own. ingested findings follow warpmap's in the markdown with the tool
+and rule in the label and their places as `file:line`. a tool whose output is there but cannot be
+read is named under the limitations (`unread_sources` in the json) and makes the coverage
+`partial`; the rest of the report still runs.
+
 each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
 markdown table prints. files are named relative to the project you pointed at, exactly as
 every other command names them, so the document and the json agree file for file and neither

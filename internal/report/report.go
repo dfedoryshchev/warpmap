@@ -7,6 +7,7 @@ import (
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
+	"github.com/dfedoryshchev/warpmap/internal/signal"
 )
 
 // how far down the hotspot ranking the audit goes. both renderers read it, so
@@ -23,6 +24,8 @@ type Report struct {
 	Coupling []metrics.Pair
 	Hotspots []metrics.Hotspot
 	Findings []Finding
+	// Unread are the sources whose findings could not be read.
+	Unread []signal.Unread
 	// Authors is how many people made the commits in the window.
 	Authors int
 	Held    []metrics.Held
@@ -54,8 +57,8 @@ const OneAuthor = "one author across the window: every file has a bus factor of 
 
 // Build runs the analyses and assembles a report for a project. commits is the
 // history churn was counted from; the coupled pairs and the author count come
-// from it.
-func Build(dir string, files []string, churn metrics.Churn, commits []metrics.Commit) Report {
+// from it. The findings of each adapter follow warpmap's own, in adapter order.
+func Build(dir string, files []string, churn metrics.Churn, commits []metrics.Commit, adapters ...signal.Adapter) Report {
 	g := graph.Build(files)
 	r := Report{
 		Dir:      dir,
@@ -63,12 +66,12 @@ func Build(dir string, files []string, churn metrics.Churn, commits []metrics.Co
 		Edges:    len(g.Edges),
 		Coupling: metrics.HiddenCoupling(dir, files, g, commits),
 		Hotspots: metrics.Hotspots(dir, files, churn),
-		Findings: Findings(g, dir),
 		Authors:  len(metrics.Authors(commits)),
 
 		Specifiers: g.Specifiers,
 		Parsed:     byExt(files),
 	}
+	r.Findings, r.Unread = signal.Collect(dir, append([]signal.Adapter{graphFindings{g}}, adapters...)...)
 	for _, e := range g.Edges {
 		if e.TypeOnly {
 			r.TypeOnlyEdges++
@@ -133,7 +136,7 @@ func (r Report) Markdown() string {
 	if len(r.Findings) > 0 {
 		b.WriteString("## findings\n\n")
 		for _, f := range r.Findings {
-			fmt.Fprintf(&b, "- `%s` **[%s] %s** - %s\n  - %s\n", f.ID, f.Severity, f.Kind, f.Detail, f.Recommendation)
+			writeFinding(&b, f)
 		}
 		b.WriteString("\n")
 	}
@@ -146,16 +149,54 @@ func (r Report) Markdown() string {
 	return b.String()
 }
 
+// writeFinding renders warpmap's own findings by id and rule, their message
+// already naming the files, and an ingested one by its tool and rule with the
+// places it points at.
+func writeFinding(b *strings.Builder, f Finding) {
+	b.WriteString("- ")
+	if f.ID != "" {
+		fmt.Fprintf(b, "`%s` ", f.ID)
+	}
+	rule := f.RuleID
+	if f.SourceTool != signal.Warpmap {
+		rule = f.SourceTool + " " + f.RuleID
+	}
+	fmt.Fprintf(b, "**[%s] %s** - %s", f.Severity, rule, f.Message)
+	if f.SourceTool != signal.Warpmap && len(f.Locations) > 0 {
+		at := make([]string, len(f.Locations))
+		for i, l := range f.Locations {
+			at[i] = "`" + l.File + "`"
+			if l.Line > 0 {
+				at[i] = fmt.Sprintf("`%s:%d`", l.File, l.Line)
+			}
+		}
+		b.WriteString(" - " + name(at, ", "))
+	}
+	b.WriteString("\n")
+	if f.Recommendation != "" {
+		fmt.Fprintf(b, "  - %s\n", f.Recommendation)
+	}
+}
+
+// packFinding keeps kind, detail and files, the names the pack used before
+// findings took the shared shape, beside rule_id, message and locations.
+type packFinding struct {
+	Finding
+	Kind   string   `json:"kind"`
+	Detail string   `json:"detail"`
+	Files  []string `json:"files"`
+}
+
 type pack struct {
-	Files         int         `json:"files"`
-	Edges         int         `json:"edges"`
-	Scope         scope       `json:"scope"`
-	Limitations   limitations `json:"limitations"`
-	Coupling      []Coupled   `json:"coupling"`
-	WindowAuthors int         `json:"window_authors"`
-	HeldByOne     []held      `json:"held_by_one"`
-	Findings      []Finding   `json:"findings"`
-	Hotspots      []ranked    `json:"hotspots"`
+	Files         int           `json:"files"`
+	Edges         int           `json:"edges"`
+	Scope         scope         `json:"scope"`
+	Limitations   limitations   `json:"limitations"`
+	Coupling      []Coupled     `json:"coupling"`
+	WindowAuthors int           `json:"window_authors"`
+	HeldByOne     []held        `json:"held_by_one"`
+	Findings      []packFinding `json:"findings"`
+	Hotspots      []ranked      `json:"hotspots"`
 }
 
 type held struct {
@@ -211,13 +252,15 @@ func (r Report) JSON() ([]byte, error) {
 		Limitations:   r.limitationsJSON(),
 		Coupling:      CoupledPairs(topCoupled(r.Coupling)),
 		HeldByOne:     []held{},
-		Findings:      []Finding{},
+		Findings:      []packFinding{},
 		Hotspots:      []ranked{},
 	}
 	for _, h := range r.Held {
 		p.HeldByOne = append(p.HeldByOne, held{File: relPath(r.Dir, h.File), Author: h.Author, Commits: h.Commits, Total: h.Total, Share: share(h)})
 	}
-	p.Findings = append(p.Findings, r.Findings...)
+	for _, f := range r.Findings {
+		p.Findings = append(p.Findings, packFinding{Finding: f, Kind: f.RuleID, Detail: f.Message, Files: Files(f)})
+	}
 	for _, h := range top(r.Hotspots, topHotspots) {
 		p.Hotspots = append(p.Hotspots, ranked{
 			File:       relPath(r.Dir, h.File),

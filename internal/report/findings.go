@@ -9,26 +9,46 @@ import (
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/graph"
+	"github.com/dfedoryshchev/warpmap/internal/signal"
 )
 
-type Severity string
+type (
+	Severity = signal.Severity
+	Finding  = signal.Finding
+)
 
 const (
-	High Severity = "high"
-	Med  Severity = "medium"
-	Low  Severity = "low"
+	High = signal.High
+	Med  = signal.Med
+	Low  = signal.Low
 )
 
 const namedFiles = 10
 
-type Finding struct {
-	ID             string   `json:"id"`
-	Severity       Severity `json:"severity"`
-	Kind           string   `json:"kind"`
-	Detail         string   `json:"detail"`
-	Recommendation string   `json:"recommendation"`
-	Files          []string `json:"files"`
+func locations(files []string) []signal.Location {
+	out := make([]signal.Location, len(files))
+	for i, f := range files {
+		out[i] = signal.Location{File: f}
+	}
+	return out
 }
+
+// Files lists the files a finding points at, in its order.
+func Files(f Finding) []string {
+	out := make([]string, len(f.Locations))
+	for i, l := range f.Locations {
+		out[i] = l.File
+	}
+	return out
+}
+
+// graphFindings is the adapter for the findings warpmap reads off its own
+// import graph.
+type graphFindings struct{ g graph.Graph }
+
+func (graphFindings) Tool() string { return signal.Warpmap }
+
+func (a graphFindings) Findings(dir string) ([]Finding, error) { return Findings(a.g, dir), nil }
 
 func relPath(dir, f string) string {
 	r, err := filepath.Rel(dir, f)
@@ -69,11 +89,12 @@ func findingID(kind string, subject []string) string {
 func Findings(g graph.Graph, dir string) []Finding {
 	fs := findings(g, dir)
 	for i, f := range fs {
-		subject := f.Files
-		if f.Kind == "dead-code" {
+		subject := Files(f)
+		if f.RuleID == "dead-code" {
 			subject = nil
 		}
-		fs[i].ID = findingID(f.Kind, subject)
+		fs[i].ID = findingID(f.RuleID, subject)
+		fs[i].SourceTool = signal.Warpmap
 	}
 	return fs
 }
@@ -87,10 +108,10 @@ func findings(g graph.Graph, dir string) []Finding {
 		f := relPath(dir, m.File)
 		fs = append(fs, Finding{
 			Severity:       High,
-			Kind:           "god-module",
-			Detail:         fmt.Sprintf("%s (in=%d out=%d)", f, m.FanIn, m.FanOut),
+			RuleID:         "god-module",
+			Message:        fmt.Sprintf("%s (in=%d out=%d)", f, m.FanIn, m.FanOut),
 			Recommendation: "too central; a change here has a wide blast radius - split responsibilities",
-			Files:          []string{f},
+			Locations:      locations([]string{f}),
 		})
 	}
 	for _, c := range graph.Cycles(g) {
@@ -101,20 +122,20 @@ func findings(g graph.Graph, dir string) []Finding {
 		}
 		fs = append(fs, Finding{
 			Severity:       Med,
-			Kind:           "cycle",
-			Detail:         fmt.Sprintf("import cycle across %d files: %s", len(files), name(files, sep)),
+			RuleID:         "cycle",
+			Message:        fmt.Sprintf("import cycle across %d files: %s", len(files), name(files, sep)),
 			Recommendation: "break it - extract the shared piece into a third module",
-			Files:          files,
+			Locations:      locations(files),
 		})
 	}
 	if files := relPaths(dir, graph.Orphans(dir, g)); len(files) > 0 {
 		sort.Strings(files)
 		fs = append(fs, Finding{
 			Severity:       Low,
-			Kind:           "dead-code",
-			Detail:         fmt.Sprintf("%d files nothing imports: %s", len(files), name(files, ", ")),
+			RuleID:         "dead-code",
+			Message:        fmt.Sprintf("%d files nothing imports: %s", len(files), name(files, ", ")),
 			Recommendation: "confirm they are entry points, or delete them",
-			Files:          files,
+			Locations:      locations(files),
 		})
 	}
 	return fs

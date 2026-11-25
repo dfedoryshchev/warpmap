@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Added
+- Findings take one shape whichever tool produced them: `source_tool`, `rule_id`, `severity`,
+  `message`, `locations` (file and, when there is one, line) and the tool's own record as `raw`.
+  `report` reads warpmap's own findings through the same seam a reader of another tool's output
+  plugs into, so ingested findings land in the same list after warpmap's, keep their tool's rule
+  id and get no warpmap `id`; a source that cannot be read is named under the limitations as
+  `unread_sources` and makes the coverage `partial`. The json keeps `kind`, `detail` and `files`
+  beside the new fields
 - `report` opens with the scope of the run and its limitations, in markdown and as `scope` and
   `limitations` in the json. The scope pins the commit read (and says when the tree had
   uncommitted changes), the release, the churn window, and a sha256 over the analysed files a

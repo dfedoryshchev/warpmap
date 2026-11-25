@@ -44,10 +44,10 @@ func TestFindingIDsAreStableAcrossRunsAndMachines(t *testing.T) {
 	seen := map[string]bool{}
 	for i, id := range got {
 		if !idRe.MatchString(id) {
-			t.Fatalf("finding %d (%s) has id %q, want wm-<kind>-<8 hex>", i, a.Findings[i].Kind, id)
+			t.Fatalf("finding %d (%s) has id %q, want wm-<kind>-<8 hex>", i, a.Findings[i].RuleID, id)
 		}
-		if !strings.HasPrefix(id, "wm-"+a.Findings[i].Kind+"-") {
-			t.Fatalf("finding %d is a %s and its id is %q", i, a.Findings[i].Kind, id)
+		if !strings.HasPrefix(id, "wm-"+a.Findings[i].RuleID+"-") {
+			t.Fatalf("finding %d is a %s and its id is %q", i, a.Findings[i].RuleID, id)
 		}
 		if seen[id] {
 			t.Fatalf("two findings share the id %s: %v", id, got)
