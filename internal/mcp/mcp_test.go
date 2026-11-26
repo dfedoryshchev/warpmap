@@ -124,6 +124,26 @@ func TestTestgapToolRanksUntestedFilesByBlastRadius(t *testing.T) {
 	}
 }
 
+// the tools read the coverage report the way the command line does, so the two
+// cannot disagree about what is tested.
+func TestTestgapAndRiskToolsReadTheCoverageReport(t *testing.T) {
+	dir := chain(t)
+	if err := os.MkdirAll(filepath.Join(dir, "coverage"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lcov := "SF:src/a.ts\nDA:1,1\nend_of_record\nSF:src/b.ts\nDA:1,1\nend_of_record\nSF:src/c.ts\nDA:1,0\nend_of_record\n"
+	if err := os.WriteFile(filepath.Join(dir, "coverage", "lcov.info"), []byte(lcov), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := callText(t, "testgap", map[string]any{"dir": dir}), "src/c.ts  2\n"; got != want {
+		t.Errorf("testgap text = %q, want %q", got, want)
+	}
+	want := "  src/b.ts: blast=1, shipped=1, tested\n"
+	if got := callText(t, "risk", map[string]any{"dir": dir, "files": []string{"src/b.ts"}}); !strings.HasPrefix(got, want) {
+		t.Errorf("risk text = %q, want it to start with %q", got, want)
+	}
+}
+
 func TestRiskToolGivesTheVerdictUnderTheProjectThreshold(t *testing.T) {
 	dir := chain(t)
 	if err := os.WriteFile(filepath.Join(dir, "warpmap.json"), []byte(`{"thresholds":{"blast":1}}`), 0o644); err != nil {

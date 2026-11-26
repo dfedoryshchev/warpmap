@@ -552,6 +552,102 @@ func TestTestgapAndRiskTagAFileTestsImportOnlyForTypes(t *testing.T) {
 	}
 }
 
+// a.test.ts imports only a.ts, but the suite ran b.ts through it; the report
+// says so, and c.ts never ran.
+func lcovProject(t *testing.T) string {
+	t.Helper()
+	dir := chainProject(t)
+	spec := "import { a } from \"./a\";\ntest(\"a\", () => a);\n"
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.test.ts"), []byte(spec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "coverage"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lcov := "TN:\nSF:" + filepath.Join(dir, "src", "a.ts") + "\nDA:1,1\nDA:2,1\nLF:2\nLH:2\nend_of_record\n" +
+		"TN:\nSF:" + filepath.Join(dir, "src", "b.ts") + "\nDA:1,1\nDA:2,1\nLF:2\nLH:2\nend_of_record\n" +
+		"TN:\nSF:" + filepath.Join(dir, "src", "c.ts") + "\nDA:1,0\nLF:1\nLH:0\nend_of_record\n"
+	if err := os.WriteFile(filepath.Join(dir, "coverage", "lcov.info"), []byte(lcov), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestTestgapAndRiskReadExecutedLinesFromLcov(t *testing.T) {
+	dir := lcovProject(t)
+	var out string
+	var code int
+	stderr := captureStderr(t, func() int {
+		out, code = captureStdout(t, func() int { return testgapCmd([]string{dir}) })
+		return code
+	})
+	want := "1 untested files; the riskiest (highest blast radius) first - test these before you change them:\n" +
+		"  blast=3    direct=1   src/c.ts\n"
+	if code != 0 || out != want {
+		t.Fatalf("testgap exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+	if note := "tested: a line ran under the suite, read from coverage/lcov.info\n"; stderr != note {
+		t.Fatalf("testgap stderr %q, want %q", stderr, note)
+	}
+	stderr = captureStderr(t, func() int {
+		out, code = captureStdout(t, func() int { return riskCmd([]string{dir, "src/b.ts", "src/c.ts"}) })
+		return code
+	})
+	want = "  src/b.ts: blast=2, shipped=1, tested\n  src/c.ts: blast=3, shipped=2, UNTESTED\n" +
+		"combined blast radius: 3 files, 2 shipped\nverdict: manageable\n"
+	if code != 0 || out != want {
+		t.Fatalf("risk exited %d and printed\n%swant 0 and\n%s", code, out, want)
+	}
+	if !strings.Contains(stderr, "read from coverage/lcov.info") {
+		t.Fatalf("risk stderr %q does not say where tested came from", stderr)
+	}
+}
+
+func TestTestgapSaysTheImportEdgeIsStructuralWithoutAReport(t *testing.T) {
+	dir := chainProject(t)
+	stderr := captureStderr(t, func() int {
+		_, code := captureStdout(t, func() int { return testgapCmd([]string{dir}) })
+		return code
+	})
+	if want := "tested: a test imports the file (structural; no coverage report at coverage/lcov.info or lcov.info)\n"; stderr != want {
+		t.Fatalf("testgap stderr %q, want %q", stderr, want)
+	}
+}
+
+func TestTestgapJSONNamesWhereTestedCameFrom(t *testing.T) {
+	dir := lcovProject(t)
+	var out string
+	captureStderr(t, func() int {
+		var code int
+		out, code = captureStdout(t, func() int { return testgapCmd([]string{"--json", dir}) })
+		return code
+	})
+	if !strings.Contains(out, `"tested_by": "coverage/lcov.info"`) || !strings.Contains(out, `"untested": 1`) {
+		t.Fatalf("testgap --json printed\n%s", out)
+	}
+	captureStderr(t, func() int {
+		var code int
+		out, code = captureStdout(t, func() int { return testgapCmd([]string{"--json", chainProject(t)}) })
+		return code
+	})
+	if !strings.Contains(out, `"tested_by": "imports"`) {
+		t.Fatalf("testgap --json without a report printed\n%s", out)
+	}
+}
+
+func TestReportCarriesTheFilesNoLineOfWhichRan(t *testing.T) {
+	dir := lcovProject(t)
+	var md string
+	captureStderr(t, func() int {
+		var code int
+		md, code = captureStdout(t, func() int { return reportCmd([]string{dir}) })
+		return code
+	})
+	if want := "- **[low] lcov never-ran** - 1 of the 3 files with lines to run ran none of them under the suite - `src/c.ts`\n"; !strings.Contains(md, want) {
+		t.Fatalf("report does not carry the lcov finding %q, it printed\n%s", want, md)
+	}
+}
+
 func TestTraceAndRiskRefuseAFileThatIsNotInTheGraph(t *testing.T) {
 	dir := chainProject(t)
 	run := map[string]func() int{

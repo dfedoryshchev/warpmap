@@ -118,6 +118,19 @@ that tests import only with `import type` is not run by the suite, but the compi
 it is neither tested nor untested: it is listed with the tag `(types only, checked by the
 compiler)`, and `risk` gives it the same tag instead of `tested`.
 
+on its own, "tested" means a test imports the file. that is structural: a file the suite reaches
+through a barrel reads untested, and a file a test imports but never calls reads tested. when
+your own test run has written an lcov report at `coverage/lcov.info` (or `lcov.info` at the
+project root), `testgap` and `risk` read it instead: a file is tested when the report says at
+least one of its lines or functions ran. warpmap reads the report, it never runs your suite.
+paths in the report can be absolute or relative to the project, with or without a leading `./`.
+the first stderr line says which one was used,
+`tested: a line ran under the suite, read from coverage/lcov.info` or
+`tested: a test imports the file (structural; ...)` with the reason, which includes a report
+that cannot be read and one whose paths name none of the analysed files (written on another
+machine, say); in both cases the import edge is used. a file the report leaves out counts as not
+run. `testgap --json` names the source as `tested_by`, the report's path or `imports`.
+
 that is the whole audit loop: what is risky, what depends on it, what is untested.
 `warpmap report . -o audit.md` writes the same findings to one markdown file you can hand
 to someone else. flags read the same wherever you put them, so
@@ -184,6 +197,10 @@ never gives it an id of its own. ingested findings follow warpmap's in the markd
 and rule in the label and their places as `file:line`. a tool whose output is there but cannot be
 read is named under the limitations (`unread_sources` in the json) and makes the coverage
 `partial`; the rest of the report still runs.
+
+the first such source is lcov: when the project holds a report where `testgap` looks for one, the
+report adds one `lcov` `never-ran` finding naming the files with lines to run of which none ran
+under the suite.
 
 each hotspot carries its `file`, `score`, `churn` and `complexity`, down the same top ten the
 markdown table prints. files are named relative to the project you pointed at, exactly as
@@ -327,9 +344,9 @@ a hit and a miss, is in [examples/blast-radius-before-a-refactor.md](examples/bl
 - `diff <dir>` - did the change make the codebase better or worse? lists the modules that started importing each other; exits 1 on a structural regression (and on a warning with `--fail-on warn`), 2 when there is no baseline to compare against
 - `risk <dir> <file>...` - blast radius + test gaps for the files you are about to change; exits 2 when a file is not in the graph, so a mistyped path cannot pass the check; `--skip-missing` assesses the files it does hold and names the rest on stderr, which is what the Action uses
 - `testgap <dir>` - untested files, ranked by how much depends on them, ties broken on direct
-  shipped importers. `--json` prints `{"untested": <count>, "types_only": <count>, "files": [...]}`,
+  shipped importers. `--json` prints `{"tested_by": ..., "untested": <count>, "types_only": <count>, "files": [...]}`,
   each row the `file`, its `blast` and `direct`, and `"types_only": true` on a file tests import
-  only for its types
+  only for its types. with an lcov report present, tested means its lines ran (see above)
 
 **work with agents**
 - `brief <dir> <file>` - a context pack to hand an agent before it touches a file

@@ -30,7 +30,7 @@ func Kind(f string) string {
 // from the graph (not line coverage). a file a test imports is considered exercised.
 // the graph is keyed by the walk's paths under dir, and so is what comes back.
 func Untested(dir string, g graph.Graph) []string {
-	untested, _ := split(dir, g)
+	untested, _ := Split(dir, g, nil)
 	return untested
 }
 
@@ -38,11 +38,15 @@ func Untested(dir string, g graph.Graph) []string {
 // compiler erases such an import, so the suite never runs the file, but it does
 // type-check it; these are neither tested nor untested.
 func TypesOnly(dir string, g graph.Graph) []string {
-	_, typesOnly := split(dir, g)
+	_, typesOnly := Split(dir, g, nil)
 	return typesOnly
 }
 
-func split(dir string, g graph.Graph) (untested, typesOnly []string) {
+// Split sorts the source files into untested and types-only. ran, when not nil,
+// is the set of files a coverage report says ran under the suite, and it decides
+// what is tested in place of the import edge; a file it leaves out that tests
+// name only for types keeps that tag.
+func Split(dir string, g graph.Graph, ran map[string]bool) (untested, typesOnly []string) {
 	isTest := func(f string) bool { return IsTest(relTo(dir, f)) }
 	runs, names := map[string]bool{}, map[string]bool{}
 	for _, e := range g.Edges {
@@ -54,6 +58,9 @@ func split(dir string, g graph.Graph) (untested, typesOnly []string) {
 		} else {
 			runs[e.To] = true
 		}
+	}
+	if ran != nil {
+		runs = ran
 	}
 	for _, f := range g.Files {
 		switch {

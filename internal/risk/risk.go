@@ -1,4 +1,5 @@
-// Package risk joins the import graph with structural test coverage: which
+// Package risk joins the import graph with test coverage, executed lines from a
+// coverage report when there is one and the import edge otherwise: which
 // untested files carry the widest blast radius, and whether a planned change
 // touches one. The command line and the MCP server both answer from here.
 package risk
@@ -29,8 +30,8 @@ type Gap struct {
 // TestGaps returns the files no test runs, widest blast radius first. On a
 // barrel-heavy project most files share a near-identical blast radius, so ties
 // go to the file more shipped files import directly. Files are the walk's own
-// paths, as in g.
-func TestGaps(dir string, g graph.Graph) []Gap {
+// paths, as in g. ran is what coverage.Split takes: nil reads the import edge.
+func TestGaps(dir string, g graph.Graph, ran map[string]bool) []Gap {
 	direct := map[string]int{}
 	for _, e := range g.Edges {
 		if !coverage.IsTest(relTo(dir, e.From)) {
@@ -43,8 +44,9 @@ func TestGaps(dir string, g graph.Graph) []Gap {
 			gaps = append(gaps, Gap{f, len(trace.BlastRadius(g, f, 0)), direct[f], typesOnly})
 		}
 	}
-	add(coverage.Untested(dir, g), false)
-	add(coverage.TypesOnly(dir, g), true)
+	untested, typesOnly := coverage.Split(dir, g, ran)
+	add(untested, false)
+	add(typesOnly, true)
 	sort.Slice(gaps, func(i, j int) bool {
 		a, b := gaps[i], gaps[j]
 		if a.Blast != b.Blast {
@@ -87,13 +89,14 @@ type Assessment struct {
 }
 
 // Assess weighs changing the given files, each relative to dir, against a
-// blast threshold.
-func Assess(dir string, g graph.Graph, changed []string, blastLimit int) Assessment {
+// blast threshold, with ran read as TestGaps reads it.
+func Assess(dir string, g graph.Graph, ran map[string]bool, changed []string, blastLimit int) Assessment {
 	untested, typesOnly := map[string]bool{}, map[string]bool{}
-	for _, f := range coverage.Untested(dir, g) {
+	u, t := coverage.Split(dir, g, ran)
+	for _, f := range u {
 		untested[f] = true
 	}
-	for _, f := range coverage.TypesOnly(dir, g) {
+	for _, f := range t {
 		typesOnly[f] = true
 	}
 	var a Assessment

@@ -17,6 +17,7 @@ import (
 	"github.com/dfedoryshchev/warpmap/internal/baseline"
 	"github.com/dfedoryshchev/warpmap/internal/config"
 	"github.com/dfedoryshchev/warpmap/internal/coverage"
+	"github.com/dfedoryshchev/warpmap/internal/covreport"
 	"github.com/dfedoryshchev/warpmap/internal/dashboard"
 	"github.com/dfedoryshchev/warpmap/internal/explain"
 	"github.com/dfedoryshchev/warpmap/internal/gitcmd"
@@ -539,7 +540,14 @@ func testgapCmd(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: warpmap testgap <dir>")
 		return 2
 	}
-	gaps := risk.TestGaps(dir, graph.Build(sourceFiles(dir)))
+	files := sourceFiles(dir)
+	ran, from, note := covreport.Tested(dir, files)
+	fmt.Fprintln(os.Stderr, note)
+	gaps := risk.TestGaps(dir, graph.Build(files), ran)
+	testedBy := "imports"
+	if ran != nil {
+		testedBy = from
+	}
 	limit := *top
 	if limit > len(gaps) {
 		limit = len(gaps)
@@ -562,10 +570,11 @@ func testgapCmd(args []string) int {
 			rows = append(rows, row{rel(dir, gap.File), gap.Blast, gap.Direct, gap.TypesOnly})
 		}
 		writeJSON(os.Stdout, struct {
-			Untested  int   `json:"untested"`
-			TypesOnly int   `json:"types_only"`
-			Files     []row `json:"files"`
-		}{len(gaps) - typesOnly, typesOnly, rows})
+			TestedBy  string `json:"tested_by"`
+			Untested  int    `json:"untested"`
+			TypesOnly int    `json:"types_only"`
+			Files     []row  `json:"files"`
+		}{testedBy, len(gaps) - typesOnly, typesOnly, rows})
 		return 0
 	}
 	fmt.Printf("%d untested files", len(gaps)-typesOnly)
@@ -664,7 +673,8 @@ func riskCmd(args []string) int {
 	}
 	dir, changed := rest[0], rest[1:]
 	blastLimit := loadConfig(dir).Thresholds.Blast
-	g := graph.Build(sourceFiles(dir))
+	files := sourceFiles(dir)
+	g := graph.Build(files)
 	if *skipMissing {
 		var kept []string
 		for _, f := range changed {
@@ -678,7 +688,9 @@ func riskCmd(args []string) int {
 	} else if code := refuseMissing(g, dir, changed...); code != 0 {
 		return code
 	}
-	a := risk.Assess(dir, g, changed, blastLimit)
+	ran, _, note := covreport.Tested(dir, files)
+	fmt.Fprintln(os.Stderr, note)
+	a := risk.Assess(dir, g, ran, changed, blastLimit)
 	a.Write(os.Stdout)
 	if a.Risky > 0 {
 		return 1
@@ -992,7 +1004,7 @@ func reportCmd(args []string) int {
 func buildReport(dir string, months int) report.Report {
 	files := sourceFiles(dir)
 	commits, window := metrics.ProjectCommits(dir, files, months)
-	r := report.Build(dir, files, metrics.ChurnOf(commits), commits)
+	r := report.Build(dir, files, metrics.ChurnOf(commits), commits, covreport.Adapter{})
 	fmt.Fprintln(os.Stderr, window.Note(r.Hotspots))
 	r.Version = version
 	r.Window = window

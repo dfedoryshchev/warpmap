@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 ## Unreleased
 
 ### Added
+- `testgap` and `risk`, on the command line and over MCP, read an lcov report when the project
+  has one at `coverage/lcov.info` or `lcov.info`: a file is tested when a line or function of it
+  ran under the suite, so a file reached through a barrel no longer reads untested. Without a
+  report, or with one that cannot be read or names none of the analysed files, the import edge
+  stays, and a stderr line says which was used; `testgap --json` carries it as `tested_by`.
+  `report` reads the same file through the findings seam and adds an `lcov` `never-ran` finding
+  for the files none of whose lines ran
 - Findings take one shape whichever tool produced them: `source_tool`, `rule_id`, `severity`,
   `message`, `locations` (file and, when there is one, line) and the tool's own record as `raw`.
   `report` reads warpmap's own findings through the same seam a reader of another tool's output

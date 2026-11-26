@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dfedoryshchev/warpmap/internal/config"
+	"github.com/dfedoryshchev/warpmap/internal/covreport"
 	"github.com/dfedoryshchev/warpmap/internal/graph"
 	"github.com/dfedoryshchev/warpmap/internal/metrics"
 	"github.com/dfedoryshchev/warpmap/internal/risk"
@@ -22,6 +23,14 @@ type request struct {
 	ID     json.RawMessage `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params"`
+}
+
+// tested reads the coverage report as the command line does, its note on
+// stderr, where the hotspots tool writes its own.
+func tested(dir string, files []string) map[string]bool {
+	ran, _, note := covreport.Tested(dir, files)
+	fmt.Fprintln(os.Stderr, note)
+	return ran
 }
 
 func reply(id json.RawMessage, result any) {
@@ -165,7 +174,8 @@ func handleCall(req request, sources func(string) []string) {
 		}
 	case "testgap":
 		listed := 0
-		for _, gap := range risk.TestGaps(p.Args.Dir, graph.Build(sources(p.Args.Dir))) {
+		files := sources(p.Args.Dir)
+		for _, gap := range risk.TestGaps(p.Args.Dir, graph.Build(files), tested(p.Args.Dir, files)) {
 			if listed >= 10 {
 				break
 			}
@@ -180,13 +190,14 @@ func handleCall(req request, sources func(string) []string) {
 			text = "risk needs at least one file in files"
 			break
 		}
-		g := graph.Build(sources(p.Args.Dir))
+		files := sources(p.Args.Dir)
+		g := graph.Build(files)
 		if missing := g.Missing(p.Args.Dir, p.Args.Files); len(missing) > 0 {
 			replyMissing(req.ID, missing)
 			return
 		}
 		var b strings.Builder
-		risk.Assess(p.Args.Dir, g, p.Args.Files, cfg.Thresholds.Blast).Write(&b)
+		risk.Assess(p.Args.Dir, g, tested(p.Args.Dir, files), p.Args.Files, cfg.Thresholds.Blast).Write(&b)
 		text = b.String()
 	default:
 		text = "unknown tool: " + p.Name
