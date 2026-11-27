@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -64,15 +63,6 @@ func plural(n int, unit string) string {
 	return fmt.Sprintf("%d %ss", n, unit)
 }
 
-// git --numstat prints a rename as "path/{old => new}/file" or "{old => new}".
-// pull out the new path so the change counts against the file that exists now.
-var renameRe = regexp.MustCompile("\\{[^}]* => ([^}]*)\\}")
-
-func normalizeRename(p string) string {
-	p = renameRe.ReplaceAllString(p, "$1")
-	return strings.ReplaceAll(p, "//", "/")
-}
-
 // Commit is one commit in the window: its hash, its author after the repo's
 // .mailmap, and the files it changed, keyed as Churn keys them.
 type Commit struct {
@@ -82,38 +72,59 @@ type Commit struct {
 	Files []string
 }
 
-// commitMark starts each commit's record in the log, so a commit that changed
-// nothing under dir still ends the one before it.
-const commitMark = "\x00"
-
 // GitCommits reads the last windowMonths of history under dir, one Commit per
 // commit that changed something there. dir may sit below the repo root: only its
 // own changes count, keyed relative to it.
 func GitCommits(dir string, windowMonths int) ([]Commit, error) {
 	since := fmt.Sprintf("%d months ago", windowMonths)
 	out, err := gitcmd.Command(dir, "log", "--since", since, "--no-merges", "--no-ext-diff", "--no-textconv",
-		"--relative", "--numstat", "--format=%x00%H%x00%aN%x00%aE", "--", ".").Output()
+		"--relative", "-z", "--numstat", "--format=%x00%H%x00%aN%x00%aE", "--", ".").Output()
 	if err != nil {
 		return nil, err
 	}
+	return parseLog(string(out)), nil
+}
+
+// parseLog reads `git log -z --numstat --format=%x00%H%x00%aN%x00%aE`. Every
+// field ends in NUL, so an empty field starts a commit, the next three are its
+// header, and each file is `added<TAB>deleted<TAB>path`, or for a rename an empty
+// path followed by the old and the new name as fields of their own.
+func parseLog(out string) []Commit {
+	fields := strings.Split(out, "\x00")
 	var commits []Commit
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.HasPrefix(line, commitMark) {
-			fields := strings.SplitN(strings.TrimRight(line[len(commitMark):], "\r"), commitMark, 3)
-			for len(fields) < 3 {
-				fields = append(fields, "")
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if f == "" {
+			if i+3 >= len(fields) {
+				break
 			}
-			commits = append(commits, Commit{Hash: strings.TrimSpace(fields[0]), Name: fields[1], Email: fields[2]})
+			commits = append(commits, Commit{Hash: strings.TrimSpace(fields[i+1]), Name: fields[i+2], Email: fields[i+3]})
+			i += 3
+			if i+1 < len(fields) {
+				// git ends the header with a newline before the first file, inside that file's field.
+				fields[i+1] = strings.TrimPrefix(fields[i+1], "\n")
+				if fields[i+1] == "" {
+					i++
+				}
+			}
 			continue
 		}
-		parts := strings.Split(line, "\t")
+		parts := strings.SplitN(f, "\t", 3)
 		if len(parts) != 3 || len(commits) == 0 {
 			continue
 		}
+		path := parts[2]
+		if path == "" {
+			if i+2 >= len(fields) {
+				break
+			}
+			path = fields[i+2]
+			i += 2
+		}
 		c := &commits[len(commits)-1]
-		c.Files = append(c.Files, normalizeRename(parts[2]))
+		c.Files = append(c.Files, path)
 	}
-	return commits, nil
+	return commits
 }
 
 // ChurnOf counts the changes each file got across commits.

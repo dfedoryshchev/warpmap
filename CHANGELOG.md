@@ -108,6 +108,10 @@ All notable changes to this project are documented in this file.
 - The GitHub Action's pull request comment no longer carries `diff`'s notes about what it could
   not measure ("per-function: unavailable ... with lizard on PATH"), which a reader of the comment
   cannot act on. They stay on stderr and so in the job log
+- Churn, and the change coupling built on it, read file names exactly as git stores them. git
+  quoted a path holding a non-ASCII byte, `"` or `\` (`src/caf\303\251.ts`), so such a file read
+  churn 0 and dropped out of coupling; and a rename with no shared directory or name
+  (`lib/old.ts` to `src/new.ts`) counted under `lib/old.ts => src/new.ts` instead of the new name
 
 ## 0.2.0 - 2026-10-28
 

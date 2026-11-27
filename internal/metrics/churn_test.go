@@ -55,6 +55,52 @@ func TestGitChurnCountsOnePerFilePerCommit(t *testing.T) {
 	}
 }
 
+func TestGitChurnKeysANonASCIINameAsWritten(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	name := "src/caf" + string(rune(0xe9)) + ".ts"
+	commitFiles(t, repo, "one", map[string]string{name: "a\n"})
+	commitFiles(t, repo, "two", map[string]string{name: "b\n"})
+
+	churn, commits, err := GitChurn(repo, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Churn{name: 2}
+	if !reflect.DeepEqual(churn, want) || commits != 2 {
+		t.Fatalf("got %+q over %d commits, want %+q over 2", keys(churn), commits, keys(want))
+	}
+}
+
+func TestGitChurnCountsARenameWithNoSharedPartUnderTheNewName(t *testing.T) {
+	repo := t.TempDir()
+	initRepo(t, repo)
+	body := "one\ntwo\nthree\nfour\nfive\nsix\n"
+	commitFiles(t, repo, "one", map[string]string{"lib/old.ts": body})
+	if err := os.MkdirAll(filepath.Join(repo, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "mv", "lib/old.ts", "src/new.ts")
+	gitIn(t, repo, "-c", "user.name=Ada", "-c", "user.email=a@example.com", "commit", "-m", "two")
+
+	churn, _, err := GitChurn(repo, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Churn{"lib/old.ts": 1, "src/new.ts": 1}
+	if !reflect.DeepEqual(churn, want) {
+		t.Fatalf("got %v, want %v", churn, want)
+	}
+}
+
+func keys(c Churn) []string {
+	var out []string
+	for k := range c {
+		out = append(out, k)
+	}
+	return out
+}
+
 func TestWindowNote(t *testing.T) {
 	churned := []Hotspot{{File: "a.ts", Churn: 2}, {File: "b.ts"}}
 	flat := []Hotspot{{File: "a.ts"}, {File: "b.ts"}}
